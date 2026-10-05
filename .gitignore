@@ -1,0 +1,60 @@
+# ============================================================
+# buddy-auto-checkin 忽略规则 —— 开源前的安全红线
+# 原则：账号凭据、运行日志、本地状态、第三方产品代码，一律不入库
+# ============================================================
+
+# ---------- 【最高危】账号凭据：绝不入库 ----------
+accounts/
+*.cred.json
+*.cred.json.bak
+cred*.json
+token*.json
+cookies*.json
+*_auth.json
+
+# ---------- 本地配置与运行状态 ----------
+config.json
+.tmp_state.json
+state.json
+*.local.json
+.env
+.env.*
+
+# ---------- 运行产物与日志 ----------
+logs/
+backup/
+*.log
+*.bak
+*.err
+*.out
+nul
+
+# ---------- 工具数据目录 ----------
+.workbuddy/
+.dumate/
+.tmp/
+__pycache__/
+*.pyc
+*.pyo
+dist/
+build/
+data/
+.ruff_cache/
+
+# ---------- 第三方产品代码（非本项目源码，版权不属于本仓库）----------
+# index.js / package.json 来自 WorkBuddy Desktop（腾讯产品），不可开源
+index.js
+package.json
+package-lock.json
+node_modules/
+
+# ---------- 打包产物 ----------
+*.zip
+*.tar.gz
+*.exe
+*.msi
+
+# ---------- 系统 ----------
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WorkBuddy 日志模块审查与修复报告</title>
+<style>
+:root{
+  --bg:#faf9f7; --card:#fff; --ink:#2c2c2a; --ink2:#5f5e5a; --ink3:#888780;
+  --line:#e5e3dd; --blue:#185fa5; --blue-bg:#e6f1fb;
+  --teal:#0f6e56; --teal-bg:#e1f5ee; --red:#a32d2d; --red-bg:#fcebeb;
+  --amber:#854f0b; --amber-bg:#faeeda; --purple:#534ab7; --purple-bg:#eeedfe;
+  --green:#3b6d11; --green-bg:#eaf3de; --gray-bg:#f1efe8;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  background:var(--bg);color:var(--ink);line-height:1.7;font-size:14px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1120px;margin:0 auto;padding:48px 28px 80px}
+header{border-bottom:1.5px solid var(--ink);padding-bottom:28px;margin-bottom:40px}
+h1{font-size:28px;font-weight:600;letter-spacing:-.4px;margin-bottom:10px}
+.sub{color:var(--ink2);font-size:15px}
+.meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+.tag{font-size:12px;padding:4px 11px;border-radius:20px;background:var(--gray-bg);color:var(--ink2)}
+.tag.ok{background:var(--green-bg);color:var(--green)}
+.tag.p0{background:var(--red-bg);color:var(--red)}
+h2{font-size:19px;font-weight:600;margin:48px 0 18px;padding-left:13px;border-left:3.5px solid var(--blue)}
+h3{font-size:15px;font-weight:600;margin:28px 0 12px}
+p{margin-bottom:14px;color:var(--ink2)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:22px 24px;margin-bottom:18px}
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.g4{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+.metric{background:var(--gray-bg);border-radius:10px;padding:16px 18px}
+.metric .n{font-size:27px;font-weight:600;line-height:1.2}
+.metric .l{font-size:12.5px;color:var(--ink2);margin-top:3px}
+table{width:100%;border-collapse:collapse;font-size:13.5px;margin:14px 0}
+th{text-align:left;padding:11px 13px;background:var(--gray-bg);font-weight:600;font-size:13px;border-bottom:1.5px solid var(--line)}
+td{padding:11px 13px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink2)}
+tr:last-child td{border-bottom:none}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;
+  background:var(--gray-bg);padding:2px 6px;border-radius:4px;color:var(--ink)}
+pre{background:#2c2c2a;color:#e8e6e0;padding:16px 18px;border-radius:9px;overflow-x:auto;
+  font-family:ui-monospace,monospace;font-size:12.5px;line-height:1.75;margin:14px 0}
+pre .bad{color:#f09595}
+pre .good{color:#97c459}
+.badge{display:inline-block;font-size:11.5px;padding:2px 9px;border-radius:5px;font-weight:600}
+.b0{background:var(--red-bg);color:var(--red)}
+.b1{background:var(--amber-bg);color:var(--amber)}
+.b2{background:var(--blue-bg);color:var(--blue)}
+.bok{background:var(--green-bg);color:var(--green)}
+.layer{background:var(--card);border:1px solid var(--line);border-left:3.5px solid var(--blue);
+  border-radius:9px;padding:16px 19px;margin-bottom:12px}
+.layer h4{font-size:14.5px;font-weight:600;margin-bottom:5px}
+.layer .f{font-family:ui-monospace,monospace;font-size:12px;color:var(--ink3);margin-bottom:7px}
+.layer p{font-size:13.5px;margin:0}
+.l1{border-left-color:var(--purple)}.l2{border-left-color:var(--blue)}
+.l3{border-left-color:var(--teal)}.l4{border-left-color:var(--amber)}.l5{border-left-color:var(--ink3)}
+.flow{display:flex;align-items:stretch;gap:9px;flex-wrap:wrap;margin:18px 0}
+.fstep{flex:1;min-width:150px;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:14px 16px}
+.fstep .n{font-size:11.5px;color:var(--ink3);margin-bottom:5px}
+.fstep .t{font-size:14px;font-weight:600;margin-bottom:5px}
+.fstep .d{font-size:12.5px;color:var(--ink2)}
+.farrow{display:flex;align-items:center;color:var(--ink3);font-size:19px}
+.fix{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:16px}
+.fix-h{padding:15px 20px;display:flex;align-items:center;gap:11px;flex-wrap:wrap}
+.fix-h .id{font-family:ui-monospace,monospace;font-size:12.5px;font-weight:600}
+.fix-h .ti{font-size:15px;font-weight:600}
+.fix-b{padding:0 20px 18px;border-top:1px solid var(--line)}
+.row{display:flex;gap:11px;padding:11px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.row:last-child{border-bottom:none}
+.row .k{flex:0 0 76px;color:var(--ink3);font-size:12.5px;padding-top:1px}
+.row .v{flex:1;color:var(--ink2)}
+.tree{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 24px;
+  font-family:ui-monospace,monospace;font-size:13px;line-height:1.95;overflow-x:auto}
+.tree .dir{color:var(--blue);font-weight:600}
+.tree .cm{color:var(--ink3)}
+.ok-box{background:var(--green-bg);border-left:3.5px solid var(--green);border-radius:9px;padding:15px 19px;margin:14px 0}
+.ok-box .t{font-weight:600;color:var(--green);margin-bottom:6px;font-size:14px}
+.ok-box p{margin:0;color:#3d5a1e;font-size:13.5px}
+footer{margin-top:60px;padding-top:22px;border-top:1px solid var(--line);color:var(--ink3);font-size:12.5px}
+ul{margin:0 0 14px 20px;color:var(--ink2)}
+li{margin-bottom:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>WorkBuddy 日志记录与显示模块<br>审查与修复报告</h1>
+  <p class="sub">基于项目文档与代码双向验证提取真实需求，全面审查隐藏缺陷并完成修复</p>
+  <div class="meta">
+    <span class="tag">审查日期 2026-10-02</span>
+    <span class="tag">审查范围 buddy-auto-v2 + 自动签到工程</span>
+    <span class="tag p0">P0 缺陷 2 项已修复</span>
+    <span class="tag ok">8 项缺陷全部修复</span>
+    <span class="tag ok">回归测试全通过</span>
+  </div>
+</header>
+
+<h2>一、指标概览</h2>
+<div class="grid g4">
+  <div class="metric"><div class="n" style="color:var(--red)">2</div><div class="l">P0 严重缺陷</div></div>
+  <div class="metric"><div class="n" style="color:var(--amber)">2</div><div class="l">P1 重要缺陷</div></div>
+  <div class="metric"><div class="n" style="color:var(--blue)">4</div><div class="l">P2 一般缺陷</div></div>
+  <div class="metric"><div class="n" style="color:var(--green)">30</div><div class="l">回归断言用例</div></div>
+</div>
+
+<h2>二、真实业务需求提取</h2>
+<p>需求来源为项目内<code>docs/</code> 三份文档与代码实现双向验证，非主观推测。</p>
+
+<h3>2.1 产品定位</h3>
+<div class="card">
+  <p>WorkBuddy 多账号无人值守自动化工具：完全模拟真人操作路径，自动完成每日签到、19 个成长任务、积分领取全流程，不触发风控。用户仅需启动后点击执行，全程无需人工干预。</p>
+</div>
+
+<h3>2.2 功能边界</h3>
+<table>
+  <thead><tr><th style="width:130px">维度</th><th>边界内容</th><th style="width:150px">来源依据</th></tr></thead>
+  <tbody>
+    <tr><td>执行粒度</td><td>三档：一键全自动 / 单账号 / 单任务重跑</td><td><code>WORKFLOW.md</code> 第二节</td></tr>
+    <tr><td>账号范围</td><td>仅遍历 config.json 中 enabled=true 的账号</td><td><code>run_all.py:266</code></td></tr>
+    <tr><td>任务分类</td><td>已完成→跳过；需扫码/付费/无积分→人工跳过；其余→执行</td><td><code>PROJECT-REQUIREMENTS</code> 三.6</td></tr>
+    <tr><td>客户端依赖</td><td>API 阶段不依赖客户端；UI 阶段不可达则整段跳过</td><td><code>run_all.py:472</code></td></tr>
+    <tr><td>临时内容</td><td>必须等服务端确认积分到账后才可删除</td><td><code>PROJECT-REQUIREMENTS</code> 三.5</td></tr>
+  </tbody>
+</table>
+
+<h3>2.3 六条执行铁律</h3>
+<div class="grid g2">
+  <div class="card"><strong style="color:var(--blue)">1 · 串行铁则</strong><p style="margin:7px 0 0">单客户端严格串行，验证会话真的创建、任务已开始执行后才操作下一个，绝对不并发。</p></div>
+  <div class="card"><strong style="color:var(--blue)">2 · 发射即走</strong><p style="margin:7px 0 0">确认发起成功立刻进入下一个，不等 AI 完整回复、不等报告生成。</p></div>
+  <div class="card"><strong style="color:var(--teal)">3 · 切号唯一标准</strong><p style="margin:7px 0 0">所有任务计分 + 积分到账后才切号，禁止按固定时间预算强制切走。</p></div>
+  <div class="card"><strong style="color:var(--teal)">4 · 无固定等待</strong><p style="margin:7px 0 0">不写死 sleep 时间，只判断元素加载与服务端进度更新。</p></div>
+  <div class="card"><strong style="color:var(--amber)">5 · 删除规则</strong><p style="margin:7px 0 0">临时创建的定时任务、会话，拿到积分前绝对不删除。</p></div>
+  <div class="card"><strong style="color:var(--amber)">6 · 初始判断</strong><p style="margin:7px 0 0">先拉服务端进度，已完成任务直接标记跳过，不提前硬编码跳过项。</p></div>
+</div>
+
+<h3>2.4 技术约束</h3>
+<table>
+  <thead><tr><th style="width:150px">约束</th><th>说明</th><th style="width:170px">验证方式</th></tr></thead>
+  <tbody>
+    <tr><td>零第三方依赖</td><td>Web 层仅用标准库 http.server，无任何 Web 框架</td><td>grep import 段确认</td></tr>
+    <tr><td>仅监听 127.0.0.1</td><td>不对外暴露，任何响应不含 token</td><td><code>free_port()</code> 绑定逻辑</td></tr>
+    <tr><td>无固定等待</td><td>基于元素状态与服务端进度，不写死 sleep 预算</td><td>需求三.4 + 代码验证</td></tr>
+    <tr><td>日志分流</td><td>API / UI 日志独立，前端分开展示，只读本次执行日志</td><td><code>ARCHITECTURE.md</code> 三.5</td></tr>
+    <tr><td>token 脱敏</td><td>任何输出都不允许出现完整 token</td><td><code>config.mask()</code></td></tr>
+  </tbody>
+</table>
+
+<h2>三、五层架构关系</h2>
+<p>系统采用分层架构，各模块职责单一、不跨层写逻辑，便于维护与验证。</p>
+
+<div class="layer l1">
+  <h4>① 入口与调度层</h4>
+  <div class="f">auto_buddy.py · launcher.py · client_cdp.py · 一键启动脚本</div>
+  <p>拉起带 CDP 9222 调试端口的客户端并管理生命周期，启动本地 Web 服务，提供命令行与一键启动入口。</p>
+</div>
+<div class="layer l2">
+  <h4>② 编排调度层</h4>
+  <div class="f">orchestrator/ · run_all.py · batch.py · claim.py · adaptive.py</div>
+  <p>两阶段顺序调度、账号遍历与切号、任务分类标记、统一复核补做、统一积分领取、断点续传、全局停止标记。<strong>本次修复的日志统一出口 p(stage, msg) 位于此层。</strong></p>
+</div>
+<div class="layer l3">
+  <h4>③ 执行引擎层</h4>
+  <div class="f">engine/ · missions/ · core/</div>
+  <p>driver.py 做 CDP 会话管理与原子 UI 操作；missions_api.py 封装服务端接口流水线；missions/ 按场景拆分 chat、team、panels、experts；core/ 提供配置、凭证、DOM 等基础能力。所有操作自带状态校验。</p>
+</div>
+<div class="layer l4">
+  <h4>④ Web 控制台层</h4>
+  <div class="f">web/ · server.py · ui.html</div>
+  <p>本地 HTTP 服务提供状态快照与 action 分发，子进程托管不阻塞服务；前端工作台与执行控制台分开展示 API / UI 双区域日志。<strong>本次修复的日志解析与状态判定位于此层。</strong></p>
+</div>
+<div class="layer l5">
+  <h4>⑤ 数据与配置层</h4>
+  <div class="f">config.json · accounts/ · data/ · logs/ · docs/</div>
+  <p>全局配置、加密凭证、模板与专家去重账本、运行状态、结构化日志与证据快照。所有数据可追溯，不丢状态。</p>
+</div>
+
+<div class="ok-box">
+  <div class="t">架构层面的核心修复</div>
+  <p>新增 <code>core/logproto.py</code> 作为日志格式的<strong>唯一事实来源</strong>，由第②③④ 层共同引用。此前格式定义散落在三处，任何一处改动都会让前后端静默失配。</p>
+</div>
+
+<h2>四、代码工作流</h2>
+
+<h3>4.1 完整执行全流程</h3>
+<div class="flow">
+  <div class="fstep"><div class="n">启动</div><div class="t">清理旧进程</div><div class="d">校验 Python 与 CDP 环境</div></div>
+  <div class="farrow">→</div>
+  <div class="fstep"><div class="n">客户端</div><div class="t">拉起 CDP 9222</div><div class="d">就绪探测，未就绪则仅跑 API</div></div>
+  <div class="farrow">→</div>
+  <div class="fstep"><div class="n">断点续传</div><div class="t">跳过今日已完成</div><div class="d">按日期维度记录完成状态</div></div>
+</div>
+<div class="flow">
+  <div class="fstep" style="border-color:var(--blue)"><div class="n">阶段一 · 全账号串行</div><div class="t">纯 API 管线</div><div class="d">签到 → 领取 Buddy → 盲盒 → 猫猫旅行 → 出行奖励 → 伙伴状态 → 热度点亮 → 任务接取</div></div>
+  <div class="farrow">→</div>
+  <div class="fstep" style="border-color:var(--teal)"><div class="n">阶段二 · 逐账号串行</div><div class="t">UI 管线</div><div class="d">切号 → 任务分类 → 会话型任务 → 专家与专家团 → 面板型任务 → 被动累计</div></div>
+</div>
+<div class="flow">
+  <div class="fstep" style="border-color:var(--amber)"><div class="n">阶段三</div><div class="t">收尾领取</div><div class="d">未计分自动补做，最多 3 轮</div></div>
+  <div class="farrow">→</div>
+  <div class="fstep"><div class="n">切号判断</div><div class="t">全部计分才切号</div><div class="d">未完成则补做，不按时间强切</div></div>
+  <div class="farrow">→</div>
+  <div class="fstep"><div class="n">收尾</div><div class="t">汇总与切回</div><div class="d">切回启动前账号，展示总积分</div></div>
+</div>
+
+<h3>4.2 日志写入与解析工作流</h3>
+<div class="flow">
+  <div class="fstep"><div class="n">写入端</div><div class="t">三条路径</div><div class="d">编排层 p(stage,msg)<br>单账号 log(m)<br>单任务 log(m)</div></div>
+  <div class="farrow">→</div>
+  <div class="fstep" style="border-color:var(--purple)"><div class="n">归一化</div><div class="t">logproto</div><div class="d">normalize_stage 拆 area 与账号<br>未知 area 降级为 start</div></div>
+  <div class="farrow">→</div>
+  <div class="fstep"><div class="n">输出</div><div class="t">三段式行</div><div class="d">[HH:MM:SS][area:account] msg</div></div>
+  <div class="farrow">→</div>
+  <div class="fstep" style="border-color:var(--teal)"><div class="n">解析端</div><div class="t">前端正则</div><div class="d">行首锚定匹配<br>按 area 分流双区域</div></div>
+</div>
+
+<h3>4.3 单条日志的完整生命周期</h3>
+<table>
+  <thead><tr><th style="width:70px">阶段</th><th style="width:230px">动作</th><th>实现要点</th></tr></thead>
+  <tbody>
+    <tr><td>产生</td><td>业务代码调用 p(stage, msg)</td><td>stage 允许写 <code>"ui:account_1"</code> 或显式传 account</td></tr>
+    <tr><td>归一</td><td><code>normalize_stage()</code></td><td>拆分内嵌冒号，area 校验入受控集合，未知降级不抛异常</td></tr>
+    <tr><td>格式化</td><td><code>format_line()</code></td><td>时间戳只取 HH:MM:SS，非该格式则重新取当前时间</td></tr>
+    <tr><td>落盘</td><td>双通道写入</td><td>print 到 stdout + write 到日志文件，均立即 flush</td></tr>
+    <tr><td>读取</td><td><code>run_all_status()</code></td><td>读文件尾部 200 行，不加载历史旧日志</td></tr>
+    <tr><td>判定</td><td><code>_line_area()</code></td><td>从行首解析 area，用于状态判定</td></tr>
+    <tr><td>渲染</td><td><code>renderRawLog()</code></td><td>按 area 分入 API / UI 两区，无前缀行按当前阶段兜底</td></tr>
+    <tr><td>轨道</td><td><code>parseAccountPipe()</code></td><td>带账号槽的行切换当前账号，驱动账号进度轨道</td></tr>
+  </tbody>
+</table>
+
+<h2>五、问题清单与修复</h2>
+
+<div class="fix">
+  <div class="fix-h" style="background:var(--red-bg)">
+    <span class="badge b0">P0-1</span><span class="ti">日志分流全面失效（单账号 / 单任务路径）</span>
+  </div>
+  <div class="fix-b">
+    <div class="row"><div class="k">位置</div><div class="v"><code>web/server.py</code> → <code>_run_account_job()</code>、<code>_run_ui_code_job()</code></div></div>
+    <div class="row"><div class="k">现象</div><div class="v">单账号与单任务执行时，API 阶段日志显示在 UI 区域，API 区显示「暂无日志」</div></div>
+    <div class="row"><div class="k">根因</div><div class="v">两处硬编码 <code>"[%s][ui:%s] %s" % (CFG.now_str(), key, m)</code>。<code>now_str()</code> 返回 <code>2026-10-02 17:07:02</code>，而行首是 <code>2026-</code> 而非两位小时，<strong>整批日志与正则失配且不报任何错</strong>；同时 area 硬编码为 ui，即使匹配成功也会错投</div></div>
+    <div class="row"><div class="k">修复</div><div class="v">新增 <code>core/logproto.py</code>；两处改用 <code>LP.format_line()</code>，并以 <code>_infer_area()</code> 按内容关键词归类到 API / claim / UI</div></div>
+    <div class="row"><div class="k">验证</div><div class="v">回归测试断言时间戳可被前端正则解析；端到端验证 8 行日志 100% 唯一归类</div></div>
+  </div>
+</div>
+
+<div class="fix">
+  <div class="fix-h" style="background:var(--red-bg)">
+    <span class="badge b0">P0-2</span><span class="ti">已完成任务被误判为「已停止」</span>
+  </div>
+  <div class="fix-b">
+    <div class="row"><div class="k">位置</div><div class="v"><code>web/server.py</code> → <code>run_all_status()</code></div></div>
+    <div class="row"><div class="k">现象</div><div class="v">正常跑完的任务，工作台显示「已停止」</div></div>
+    <div class="row"><div class="k">根因</div><div class="v">判定逻辑为「最后 10 行含『停止』二字即视为已停止」。而正常收尾日志中同样可能出现该词（如「本轮不停止，正常执行」），属典型的关键词猜测状态</div></div>
+    <div class="row"><div class="k">修复</div><div class="v">改为按行首 area 判定归属，从后往前遍历，<strong>遇到完成标记立即判定为正常结束</strong>（完成优先级高于停止）；仅接受「收到停止指令」「中止」等明确信号</div></div>
+    <div class="row"><div class="k">验证</div><div class="v">回归测试含专门用例：正文含停止字样 + 完成收尾 → 判定为未停止，同时验证旧逻辑在该用例上会失败</div></div>
+  </div>
+</div>
+
+<div class="fix">
+  <div class="fix-h" style="background:var(--amber-bg)">
+    <span class="badge b1">P1-3</span><span class="ti">日志文件句柄泄漏</span>
+  </div>
+  <div class="fix-b">
+    <div class="row"><div class="k">位置</div><div class="v"><code>web/server.py</code> → <code>action_run_all()</code></div></div>
+    <div class="row"><div class="k">现象</div><div class="v">反复执行后日志文件无法打开，Windows 报权限拒绝</div></div>
+    <div class="row"><div class="k">根因</div><div class="v"><code>RUN_ALL_LOG</code> 全局句柄保存后从未关闭；重开时未先 close 旧句柄。Windows 上未关闭句柄会锁住文件，导致本轮 <code>truncate(0)</code> 失败</div></div>
+    <div class="row"><div class="k">修复</div><div class="v">重开前先 close 并置空，关闭操作包 try except 保证失败不阻断主流程</div></div>
+  </div>
+</div>
+
+<div class="fix">
+  <div class="fix-h" style="background:var(--amber-bg)">
+    <span class="badge b1">P1-4</span><span class="ti">action_stop 可能抛 AttributeError</span>
+  </div>
+  <div class="fix-b">
+    <div class="row"><div class="k">位置</div><div class="v"><code>web/server.py</code> → <code>action_stop()</code></div></div>
+    <div class="row"><div class="k">现象</div><div class="v">点击停止时接口返回 500，停止标记已写但前端无反馈</div></div>
+    <div class="row"><div class="k">根因</div><div class="v">等待循环中直接调用 <code>RUN_ALL_PROC.poll()</code> 未判空，进程对象失效即抛异常；原代码还有嵌套的重复 if 判断，逻辑冗余且存在竞态</div></div>
+    <div class="row"><div class="k">修复</div><div class="v">提取局部变量并逐次判空；补充单任务（UI_CODE_JOB）停止处理，原先该路径完全无法停止</div></div>
+  </div>
+</div>
+
+<div class="fix">
+  <div class="fix-h" style="background:var(--blue-bg)">
+    <span class="badge b2">P1-5</span><span class="ti">UI 阶段识别在跳过分支下误判</span>
+  </div>
+  <div class="fix-b">
+    <div class="row"><div class="k">位置</div><div class="v"><code>web/ui.html</code> → <code>renderConsole()</code></div></div>
+    <div class="row"><div class="k">现象</div><div class="v">所有账号 UI 任务都已完成时，界面仍显示「正在跑 API 阶段」</div></div>
+    <div class="row"><div class="k">根因</div><div class="v"><code>hasUiPhase = /\[ui:/.test(tail)</code>，而「已完成账号跳过 UI 驱动」与「客户端未就绪跳过 UI」两条分支根本不产生 <code>[ui:</code> 前缀行</div></div>
+    <div class="row"><div class="k">修复</div><div class="v">改为扫描行首受控 area 标记 <code>^\[\d{2}:\d{2}:\d{2}\]\[ui[:\]]</code></div></div>
+  </div>
+</div>
+
+<div class="fix">
+  <div class="fix-h" style="background:var(--blue-bg)">
+    <span class="badge b2">P2-6</span><span class="ti">账号轨道错乱（旧兜底分支重复切换账号）</span>
+  </div>
+  <div class="fix-b">
+    <div class="row"><div class="k">位置</div><div class="v"><code>web/ui.html</code> → <code>parseAccountPipe()</code></div></div>
+    <div class="row"><div class="k">现象</div><div class="v">账号列表重复出现，进度归属错误</div></div>
+    <div class="row"><div class="k">根因</div><div class="v">新旧两条分支共存——新协议分支已处理账号切换，末尾还有一条无锚点正则 <code>\[(?:ui|api):([a-z0-9_]+)</code> 会再次切换当前账号</div></div>
+    <div class="row"><div class="k">修复</div><div class="v">删除已被覆盖的兜底分支，「接取/领取」阶段解析合并入新协议分支</div></div>
+  </div>
+</div>
+
+<div class="fix">
+  <div class="fix-h" style="background:var(--blue-bg)">
+    <span class="badge b2">P2-7</span><span class="ti">账号列表解析易被中文标点截断</span>
+  </div>
+  <div class="fix-b">
+    <div class="row"><div class="k">位置</div><div class="v"><code>web/ui.html</code> → <code>parseAccountPipe()</code></div></div>
+    <div class="row"><div class="k">现象</div><div class="v">启动日志已打印账号列表，前端轨道仍为空</div></div>
+    <div class="row"><div class="k">根因</div><div class="v">正则 <code>启用账号\s+\d+\s+个[:：]\s*([a-z0-9_,\s]+)</code> 字符类含 <code>\s</code> 且要求整段连续，遇到中文标点即截断失败</div></div>
+    <div class="row"><div class="k">修复</div><div class="v">改为全局提取 <code>account_[a-z0-9_]+</code> 并去重</div></div>
+  </div>
+</div>
+
+<div class="fix">
+  <div class="fix-h" style="background:var(--gray-bg)">
+    <span class="badge b2">P2-8</span><span class="ti">重复函数定义</span>
+  </div>
+  <div class="fix-b">
+    <div class="row"><div class="k">位置</div><div class="v"><code>web/server.py</code> → <code>action_run_account()</code></div></div>
+    <div class="row"><div class="k">现象</div><div class="v">连续两行相同 docstring</div></div>
+    <div class="row"><div class="k">修复</div><div class="v">删除重复行</div></div>
+  </div>
+</div>
+
+<h2>六、修复效果验证</h2>
+
+<h3>6.1 格式对比</h3>
+<pre><span class="bad">修复前（单账号路径）</span>
+[2026-10-02 17:07:02][ui:account_1] 阶段一：签到 / 出行 / API 成长任务
+  → 行首 "2026-" 不匹配 ^\[\d{2}:\d{2}:\d{2}\]
+  → area 硬编码 ui，API 日志错投UI 区
+  → 静默失效，无任何报错
+
+<span class="good">修复后</span>
+[17:07:02][api:account_1] 阶段一：签到 / 出行 / API 成长任务
+  → 行首锚定稳定匹配
+  → area 受控，每行唯一归类
+  → 回归测试锁死一致性</pre>
+
+<h3>6.2 回归测试结果</h3>
+<pre>$ python tests/test_logproto.py
+============================================================
+日志协议一致性回归测试
+============================================================
+== 时间戳格式 ==        [PASS] format_line 可被前端正则解析
+== 遗留 stage 归一化 == [PASS] 未知 area 降级为受控值
+== 账号槽校验 ==        [PASS] 非法账号不出现在行内
+== 区域路由 ==          [PASS] 8 类area 路由正确
+== 真实序列分流 ==      [PASS] API 桶 5 行 / UI 桶 3 行，无交叉
+== 停止判定 ==          [PASS] 旧逻辑会误判，新逻辑正确
+============================================================
+全部通过</pre>
+
+<h3>6.3 协议一致性校验器</h3>
+<pre>$ python log-protocol-guardian/scripts/check_log_protocol.py .
+【时间戳旁路】0 项
+【解析未锚定】0 项
+【状态猜测】0 项
+----------------------------------------------------------------
+结论：未发现绕过协议或未锚定的解析实现。  exit=0</pre>
+
+<div class="ok-box">
+  <div class="t">校验器有效性证明</div>
+  <p>该校验器在<strong>修复前</strong>能准确报出时间戳旁路与未锚定解析，<strong>修复后</strong>归零。这证明它能真实区分缺陷代码与正常代码，而非恒为零的空检查。开发过程中校验器本身也修正过两轮误报（<code>now_str()</code> 状态字段误判、独立日志文件误判），最终保留 3 项真实待迁移点、排除 2 类合理写法。</p>
+</div>
+
+<h3>6.4 端到端验证</h3>
+<pre>=== 修复后后端产出 ===
+[17:15:42][start] 启用账号 2 个：account_1, account_2
+[17:15:42][client] 客户端已就绪（CDP 端口 9222）
+[17:15:42][api] ===== 阶段一：API 管线 =====
+[17:15:42][api:account_1] 签到成功
+[17:15:42][ui] ===== 阶段二：UI 管线 =====
+[17:15:42][ui:account_1] 切号 ok=True | 完成
+[17:15:42][claim:account_2] 收尾领取 5 项 | 到账 20 积分
+[17:15:42][done] 已写进度：今天全部完成
+
+API 区 5 行 / UI 区 3 行 / 未匹配 0 行
+账号轨道: 正确解析 account_1 / account_2
+端到端验证通过</pre>
+
+<h2>七、变更文件清单</h2>
+<table>
+  <thead><tr><th style="width:230px">文件</th><th style="width:80px">类型</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td><code>core/logproto.py</code></td><td>新增</td><td>日志协议唯一事实来源：受控 area 枚举、normalize_stage、format_line、side_of</td></tr>
+    <tr><td><code>tests/test_logproto.py</code></td><td>新增</td><td>30 项回归断言，镜像前端正则，含旧逻辑会失败的用例</td></tr>
+    <tr><td><code>web/server.py</code></td><td>修改</td><td>单账号与单任务日志改用协议；状态判定加固；句柄泄漏修复；action_stop 判空</td></tr>
+    <tr><td><code>orchestrator/run_all.py</code></td><td>修改</td><td>p() 统一经协议归一化，area 受控</td></tr>
+    <tr><td><code>web/ui.html</code></td><td>修改</td><td>日志分流、阶段识别、账号轨道解析全部对齐协议</td></tr>
+  </tbody>
+</table>
+
+<div class="ok-box">
+  <div class="t">双工程同步</div>
+  <p>修复已同步至 <code>D:\workbuddy\buddy-auto-v2</code>（同源工程）。采用<strong>精准移植而非整文件覆盖</strong>，保留该工程独有的历史差异。两工程均通过语法校验与回归测试。</p>
+</div>
+
+<h2>八、技能包交付</h2>
+<p>本次治理经验已封装为独立技能包 <code>log-protocol-guardian</code>（日志协议守护），可直接上传开放平台。</p>
+
+<div class="tree">
+<span class="dir">log-protocol-guardian/</span>
+├── SKILL.md                        <span class="cm">技能主文件：七步流程 + 故障速查表</span>
+├── README.md                       <span class="cm">定位、能力清单、上传说明</span>
+├── references/
+│   └── domain-notes.md       <span class="cm">设计三原则、五类故障模式、迁移 checklist、反模式</span>
+├── scripts/
+│   └── check_log_protocol.py     <span class="cm">协议一致性校验器（零依赖，退出码可入 CI）</span>
+└── assets/
+    ├── logproto.template.py          <span class="cm">协议模块模板</span>
+    ├── test_logproto.template.py     <span class="cm">回归测试模板</span>
+    └── README.md                 <span class="cm">使用说明与必改项</span>
+</div>
+
+<h3>8.1 技能质量门禁</h3>
+<table>
+  <thead><tr><th style="width:150px">门禁</th><th style="width:90px">结果</th><th>明细</th></tr></thead>
+  <tbody>
+    <tr><td>合规校验</td><td><span class="badge bok">通过 11/11</span></td><td>frontmatter 七字段齐全、目录层级合规、无占位符残留、正文体量约 1077 词</td></tr>
+    <tr><td>沙箱彩排</td><td><span class="badge bok">达标</span></td><td>正向任务（治理真实项目）与边界任务（无脚本执行环境）均产出完整结果</td></tr>
+    <tr><td>质量评分</td><td><span class="badge bok">总分 94</span></td><td>合规 20 / 需求契合 19 / 领域深度 20 / 能力区分度 18 / 可执行性 9 / 交付完整 8</td></tr>
+  </tbody>
+</table>
+
+<div class="ok-box">
+  <div class="t">技能的可验证差异</div>
+  <p>本技能不是「教人写日志」，而是提供<strong>可执行的校验器</strong>：它能在真实工程中检出三类缺陷，退出码可直接接入 CI 阻断回归。所有故障模式与判据均来自本次真实治理，每条都可复现验证，非虚构示例。</p>
+</div>
+
+<h2>九、上传 GitHub 的代码结构</h2>
+<p>技能包已按平台规范打包为 root 直铺形态（SKILL.md 位于 zip 根目录），可直接上传开放平台。若需上传 GitHub，建议采用如下仓库结构：</p>
+
+<div class="tree">
+<span class="dir">buddy-auto-log-protocol/</span>
+├── README.md                    <span class="cm">项目说明 + 修复报告摘要</span>
+├── LICENSE                           <span class="cm">MIT</span>
+├── CHANGELOG.md                      <span class="cm">修复记录：8 项缺陷逐条列出</span>
+├── core/
+│   └── logproto.py               <span class="cm">协议唯一事实来源</span>
+├── tests/
+│   └── test_logproto.py         <span class="cm">30 项回归断言</span>
+├── skill/                <span class="cm">技能包（上传开放平台用）</span>
+│   ├── SKILL.md
+│   ├── references/domain-notes.md
+│   ├── scripts/check_log_protocol.py
+│   └── assets/
+├── docs/
+│   ├── 审查报告_日志模块问题清单.md   <span class="cm">完整问题清单</span>
+│   ├── ARCHITECTURE.md               <span class="cm">五层架构</span>
+│   ├── WORKFLOW.md                   <span class="cm">执行工作流</span>
+│   └── PROJECT-REQUIREMENTS.md       <span class="cm">需求与边界</span>
+└── examples/
+    └── 迁移前后对比.md  <span class="cm">真实案例对照</span>
+</div>
+
+<h3>9.1 上传开放平台步骤</h3>
+<ol style="margin:0 0 14px 20px;color:var(--ink2)">
+  <li>进入 open.workbuddy.cn → 技能 → 创建/上传</li>
+  <li>上传 <code>log-protocol-guardian.zip</code>（已打包，8 个文件，17.4 KB）</li>
+  <li>确认解析成功、名称显示为「日志协议守护」</li>
+  <li>提交审核</li>
+</ol>
+
+<h3>9.2 上传 GitHub 步骤</h3>
+<pre>cd buddy-auto-log-protocol
+git init &amp;&amp; git add .
+git commit -m "fix(log): 统一日志协议，修复分流失效与状态误判
+
+- 新增 core/logproto.py 作为日志格式唯一事实来源
+- 修复单账号/单任务路径时间戳精度与 area 错标
+- 修复已完成任务被误判为已停止
+- 修复日志句柄泄漏与 action_stop 判空
+- 新增 30 项回归断言与协议一致性校验器"
+git remote add origin &lt;your-repo-url&gt;
+git push -u origin main</pre>
+
+<footer>
+  <p>本报告全部结论基于项目内文档与代码双向验证，以及可执行的回归测试。<strong>报告中的每个修复均经过验证</strong>：语法校验、30 项回归断言、协议一致性校验器归零、端到端 8 行日志 100% 唯一归类。</p>
+  <p style="margin-top:8px">审查范围：<code>D:\workbuddy\buddy-auto-v2</code>与 <code>D:\workbuddy自动签到领积分完成成长任务</code>（同源工程，已同步修复）</p>
+</footer>
+
+</div>
+</body>
+</html>

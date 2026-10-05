@@ -1,0 +1,48 @@
+{
+  "_readme": "配置模板：复制为 config.json 后按实际填写。切勿把 config.json 与 accounts/ 提交到仓库。",
+  "python_path": "REPLACE_ME",
+  "auto_add_new_accounts": false,
+  "allow_write_client_auth": false,
+  "retry": {
+    "attempts": 0,
+    "backoff_seconds": 0
+  },
+  "schedule": {
+    "trigger_mode": "REPLACE_ME",
+    "every_minutes": 0,
+    "window_minutes": 0,
+    "task_prefix": "REPLACE_ME"
+  },
+  "alert": {
+    "desktop_notify": false,
+    "notify_on_success": false,
+    "webhook_url": "REPLACE_ME",
+    "alert_log": "REPLACE_ME"
+  },
+  "skip_tasks": {
+    "_note": "REPLACE_ME",
+    "codes": [
+      "REPLACE_ME",
+      "REPLACE_ME"
+    ],
+    "keywords": []
+  },
+  "accounts": [],
+  "paid_tasks": {
+    "codes": [
+      "REPLACE_ME"
+    ],
+    "keywords": [
+      "REPLACE_ME",
+      "REPLACE_ME"
+    ]
+  },
+  "auto_mode": false,
+  "free_quota": false,
+  "_free_quota_note": "REPLACE_ME",
+  "dev": {},
+  "cheap_models": [
+    "REPLACE_ME",
+    "REPLACE_ME"
+  ]
+}

@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WorkBuddy 自动签到领积分项目 · 全栈代码审查报告</title>
+<style>
+  :root{
+    --ink:#1a2333; --sub:#5b6b83; --line:#d6deea;
+    --bg:#f4f7fb; --card:#ffffff; --acc:#2f6fed; --acc2:#0ea5a4;
+    --p0:#d92d20; --p1:#e67e22; --p2:#b7791f; --p3:#667085;
+    --ok:#188a5c; --warn:#b45309;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.75 "Microsoft YaHei","PingFang SC","Segoe UI",sans-serif;}
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 22px 80px;}
+  header.hero{background:linear-gradient(135deg,#13294b 0%,#1d4ed8 68%,#2f6fed 100%);
+    color:#fff;border-radius:16px;padding:30px 34px;margin-bottom:26px;}
+  header.hero h1{margin:0 0 8px;font-size:26px;letter-spacing:.5px;}
+  header.hero .meta{opacity:.86;font-size:13px;}
+  header.hero .badges{margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;}
+  .badge{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.32);
+    border-radius:999px;padding:3px 12px;font-size:12px;}
+  h2{font-size:20px;margin:38px 0 14px;padding-left:12px;border-left:5px solid var(--acc);}
+  h3{font-size:16px;margin:22px 0 10px;}
+  p{margin:8px 0;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:18px 20px;margin:14px 0;box-shadow:0 1px 3px rgba(20,40,80,.05);}
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px;}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top;}
+  th{background:#eef3fa;font-weight:600;white-space:nowrap;}
+  tr:nth-child(even) td{background:#fafcff;}
+  code{background:#edf1f8;border:1px solid #dbe2ee;border-radius:4px;
+    padding:1px 6px;font:12px Consolas,"Courier New",monospace;color:#0b3b7a;}
+  .file{font:12px Consolas,monospace;color:#7c3aed;}
+  .tag{display:inline-block;border-radius:6px;padding:1px 9px;font-size:12px;font-weight:700;color:#fff;}
+  .t-p0{background:var(--p0)} .t-p1{background:var(--p1)} .t-p2{background:var(--p2)} .t-p3{background:var(--p3)}
+  .verdict{font-weight:700;}
+  .v-ok{color:var(--ok)} .v-warn{color:var(--warn)} .v-bad{color:var(--p0)}
+  .flow{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:14px;margin:14px 0;overflow-x:auto;}
+  .flow svg{width:100%;height:auto;display:block;}
+  .legend{font-size:12px;color:var(--sub);display:flex;gap:18px;flex-wrap:wrap;margin:6px 0 2px;}
+  .legend i{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:-2px;margin-right:5px;}
+  .kpi{display:flex;gap:14px;flex-wrap:wrap;margin:16px 0;}
+  .kpi .box{flex:1;min-width:150px;background:#fff;border:1px solid var(--line);
+    border-radius:12px;padding:14px 16px;text-align:center;}
+  .kpi .num{font-size:26px;font-weight:800;}
+  .kpi .cap{font-size:12px;color:var(--sub);margin-top:2px;}
+  ul{margin:8px 0 8px 22px;padding:0;}
+  li{margin:4px 0;}
+  .note{background:#fff8e6;border:1px solid #f2dfae;border-radius:8px;padding:10px 14px;
+    font-size:13px;margin:10px 0;}
+  .chain{font-family:Consolas,monospace;font-size:12.5px;background:#0f1c30;color:#cfe3ff;
+    border-radius:8px;padding:12px 16px;overflow-x:auto;line-height:1.9;white-space:pre;}
+  .chain b{color:#ffd579;}
+  footer{color:var(--sub);font-size:12px;margin-top:40px;text-align:center;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>WorkBuddy 自动签到领积分 · 全栈代码审查报告</h1>
+  <div class="meta">项目：D:\workbuddy自动签到领积分完成成长任务 ｜ 审查日期：2026-09-28 ｜ 范围：core / engine / missions / orchestrator / web / docs 全领域</div>
+  <div class="badges">
+    <span class="badge">分层取证：6 层</span>
+    <span class="badge">全量精读：约 7,800 行</span>
+    <span class="badge">确认 Bug：P0×1 ｜ P1×1 ｜ P2×1 ｜ P3×2</span>
+    <span class="badge">静态告警甄别：误报 3 处</span>
+  </div>
+</header>
+
+<div class="kpi">
+  <div class="box"><div class="num" style="color:var(--p0)">P0 · 1</div><div class="cap">阻断级：续期凭证→信封覆写→API 全 401</div></div>
+  <div class="box"><div class="num" style="color:var(--p1)">P1 · 1</div><div class="cap">收尾「猫猫旅行二次检查」静默失效（流程图不符）</div></div>
+  <div class="box"><div class="num" style="color:var(--p2)">P2 · 1</div><div class="cap">atrest 密钥缓存：缺失也缓存，补 key 需重启</div></div>
+  <div class="box"><div class="num" style="color:var(--p3)">P3 · 2</div><div class="cap">开源打包引用不存在目录 / 注释-行为漂移</div></div>
+</div>
+
+<!-- ======================= 一、结论摘要 ======================= -->
+<h2>一、审查结论摘要</h2>
+<div class="card">
+<p>对项目执行了 6 层全栈审查（core 基础设施 → engine 引擎 → missions 任务模块 → orchestrator 编排 → web 工作台 → docs 文档与流程图），并专项定位了工作台「续期所有凭证」后<strong>账号信息全部查询失败、找不到任务列表</strong>的重大故障。根因链已完整实证：</p>
+<div class="chain"><b>data/atrest.key 缺失</b>
+  → <b>creds.read_auth_file()</b> 静默跳过信封解密（core/creds.py:62-68）
+  → <b>capture()[续期]</b> 把 {$wbEncrypted} 信封对象<b>原样覆写</b>进 accounts/*.cred.json（core/creds.py:235）
+  → <b>load_cred()</b> 仅校验 accessToken 非空而放行信封（core/creds.py:93-94）
+  → <b>core/api.py</b> 用 "%s" 拼接出 <b>Bearer {'$wbEncrypted':1,...}</b> 请求头
+  → Growth API <b>全部 401</b> → 「账号信息查询失败 / 任务列表为空」</div>
+<p>同时确认 1 个「流程图与实际运行行为不匹配」的执行缺陷（claim.py 收尾旅行检查传 <span class="file">cred=None</span>，永远静默失败）、1 个密钥缓存缺陷（补 key 后常驻进程不生效）及 2 个低危项。修复方案与验证计划见报告第五、六节。</p>
+</div>
+
+<!-- ======================= 二、架构设计流程图 ======================= -->
+<h2>二、架构设计流程图</h2>
+<div class="flow">
+<div class="legend">
+  <span><i style="background:#eef3fa;border:1px solid #c9d5e7"></i>分层容器</span>
+  <span><i style="background:#2f6fed"></i>主调用链</span>
+  <span><i style="background:#e67e22"></i>数据/凭证流</span>
+  <span><i style="background:#0ea5a4"></i>CDP/网络外部通道</span>
+  <span><i style="background:#d92d20"></i>故障点（P0/P1）</span>
+</div>
+<svg viewBox="0 0 1180 760" xmlns="http://www.w3.org/2000/svg" font-family="'Microsoft YaHei',sans-serif">
+  <defs>
+    <marker id="arrowB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2f6fed"/>
+    </marker>
+    <marker id="arrowO" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#e67e22"/>
+    </marker>
+    <marker id="arrowT" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#0ea5a4"/>
+    </marker>
+  </defs>
+  <style>
+    .layer{fill:#f6f9fe;stroke:#c9d5e7;stroke-width:1;rx:10}
+    .layert{font-size:13px;font-weight:700;fill:#33415c}
+    .node{fill:#ffffff;stroke:#8fa6c8;stroke-width:1.2;rx:8}
+    .nodet{font-size:12px;fill:#1a2333;text-anchor:middle}
+    .sub{font-size:10.5px;fill:#5b6b83;text-anchor:middle}
+    .core{stroke:#5b8def;fill:#f0f5ff}
+    .hot{stroke:#d92d20;stroke-width:1.8;fill:#fff1f0}
+    .arrow{stroke:#2f6fed;stroke-width:1.6;fill:none;marker-end:url(#arrowB)}
+    .arrowO{stroke:#e67e22;stroke-width:1.6;fill:none;marker-end:url(#arrowO)}
+    .arrowT{stroke:#0ea5a4;stroke-width:1.6;fill:none;marker-end:url(#arrowT);stroke-dasharray:6 4}
+    .lbl{font-size:11px;fill:#5b6b83}
+  </style>
+
+  <!-- L1 外部 -->
+  <rect class="layer" x="20" y="16" width="1140" height="86"/>
+  <text class="layert" x="36" y="36">外部环境 / 数据源</text>
+  <rect class="node" x="70"  y="48" width="230" height="44"/><text class="nodet" x="185" y="65">WorkBuddy 客户端</text><text class="sub" x="185" y="82">CDP 调试端口 9222</text>
+  <rect class="node" x="400" y="48" width="240" height="44"/><text class="nodet" x="520" y="65">客户端登录态</text><text class="sub" x="520" y="82">auth\*.info（$wbEncrypted 信封）</text>
+  <rect class="node" x="760" y="48" width="250" height="44"/><text class="nodet" x="885" y="65">Growth 业务 API</text><text class="sub" x="885" y="82">/activity/growth/*（HTTPS）</text>
+
+  <!-- L2 工作台 -->
+  <rect class="layer" x="20" y="128" width="1140" height="80"/>
+  <text class="layert" x="36" y="148">Web 工作台层</text>
+  <rect class="node core" x="370" y="160" width="440" height="40"/>
+  <text class="nodet" x="590" y="177">web/server.py · HTTP 工作台（action_*）</text>
+  <text class="sub" x="590" y="192">capture 抓凭证 ｜ capture_all 续期全部 ｜ run 执行 ｜ query 查询 ｜ add/remove/scan…</text>
+
+  <!-- L3 编排 -->
+  <rect class="layer" x="20" y="234" width="1140" height="86"/>
+  <text class="layert" x="36" y="254">编排层 orchestrator/</text>
+  <rect class="node" x="40"  y="268" width="250" height="44"/><text class="nodet" x="165" y="285">run_all.py</text><text class="sub" x="165" y="302">阶段编排 0/1/2/3 主流程</text>
+  <rect class="node" x="330" y="268" width="210" height="44"/><text class="nodet" x="435" y="285">batch.py</text><text class="sub" x="435" y="302">UI 批量任务执行</text>
+  <rect class="node hot" x="580" y="268" width="230" height="44"/><text class="nodet" x="695" y="285">claim.py（P1 缺陷点）</text><text class="sub" x="695" y="302">收尾领取 + 旅行复检(失效)</text>
+  <rect class="node" x="850" y="268" width="280" height="44"/><text class="nodet" x="990" y="285">adaptive.py</text><text class="sub" x="990" y="302">任务适配 · MANUAL_ONLY/IMPLEMENTED</text>
+
+  <!-- L4 引擎 -->
+  <rect class="layer" x="20" y="346" width="1140" height="96"/>
+  <text class="layert" x="36" y="366">执行引擎层 engine/</text>
+  <rect class="node" x="40"  y="382" width="168" height="50"/><text class="nodet" x="124" y="400">tasks.py</text><text class="sub" x="124" y="417">任务清单/领取/付费一票否决</text>
+  <rect class="node" x="230" y="382" width="196" height="50"/><text class="nodet" x="328" y="400">missions_api.py</text><text class="sub" x="328" y="417">业务 API 封装（签到/盲盒/旅行…）</text>
+  <rect class="node" x="448" y="382" width="140" height="50"/><text class="nodet" x="518" y="400">active.py</text><text class="sub" x="518" y="417">成长热度点亮</text>
+  <rect class="node" x="610" y="382" width="150" height="50"/><text class="nodet" x="685" y="400">driver.py</text><text class="sub" x="685" y="417">CDP 浏览器驱动</text>
+  <rect class="node" x="782" y="382" width="160" height="50"/><text class="nodet" x="862" y="400">switch.py</text><text class="sub" x="862" y="417">账号 UI 切换</text>
+  <rect class="node" x="964" y="382" width="186" height="50"/><text class="nodet" x="1057" y="400">connector_oauth.py</text><text class="sub" x="1057" y="417">连接器全自动授权</text>
+
+  <!-- L5 任务模块 -->
+  <rect class="layer" x="20" y="468" width="1140" height="104"/>
+  <text class="layert" x="36" y="488">任务模块层 missions/</text>
+  <rect class="node" x="40"  y="502" width="206" height="60"/><text class="nodet" x="143" y="522">panels.py</text><text class="sub" x="143" y="540">入口/首页/高频操作面板</text>
+  <rect class="node" x="268" y="502" width="206" height="60"/><text class="nodet" x="371" y="522">experts.py · chat.py</text><text class="sub" x="371" y="540">专家团召唤 / 模型对话</text>
+  <rect class="node" x="496" y="502" width="206" height="60"/><text class="nodet" x="599" y="522">team.py · skill.py</text><text class="sub" x="599" y="540">团队任务账本 / 技能使用</text>
+  <rect class="node" x="724" y="502" width="206" height="60"/><text class="nodet" x="827" y="522">scenes.py · lighthouse_flow.py</text><text class="sub" x="827" y="540">灵感创作 / 灯塔专家恢复流程</text>
+  <rect class="node" x="952" y="502" width="198" height="60"/><text class="nodet" x="1051" y="522">screenshot_record.py</text><text class="sub" x="1051" y="540">tools/ 证据截图</text>
+
+  <!-- L6 基础设施 -->
+  <rect class="layer" x="20" y="598" width="1140" height="84"/>
+  <text class="layert" x="36" y="618">基础设施层 core/</text>
+  <rect class="node core" x="40"  y="632" width="150" height="42"/><text class="nodet" x="115" y="650">config.py</text><text class="sub" x="115" y="665">常量/配置</text>
+  <rect class="node core" x="212" y="632" width="150" height="42"/><text class="nodet" x="287" y="650">api.py</text><text class="sub" x="287" y="665">HTTP+Bearer 头(P0 出口)</text>
+  <rect class="node core hot" x="384" y="632" width="176" height="42"/><text class="nodet" x="472" y="650">creds.py（P0 覆写点）</text><text class="sub" x="472" y="665">凭证读/抓/续期</text>
+  <rect class="node core hot" x="582" y="632" width="180" height="42"/><text class="nodet" x="672" y="650">atrest.py（P2 缓存）</text><text class="sub" x="672" y="665">AES-GCM 信封解密/密钥</text>
+  <rect class="node core" x="784" y="632" width="150" height="42"/><text class="nodet" x="859" y="650">cdp.py</text><text class="sub" x="859" y="665">CDP 协议客户端</text>
+  <rect class="node core" x="956" y="632" width="160" height="42"/><text class="nodet" x="1036" y="650">logs.py · switch</text><text class="sub" x="1036" y="665">日志/杂项</text>
+
+  <!-- 数据 -->
+  <rect class="layer" x="20" y="708" width="1140" height="46"/>
+  <text class="layert" x="36" y="733">数据存储</text>
+  <rect class="node" x="200" y="716" width="240" height="30"/><text class="nodet" x="320" y="736">accounts\*.cred.json（凭证快照，P0 被污染）</text>
+  <rect class="node" x="470" y="716" width="290" height="30"/><text class="nodet" x="615" y="736">data\：atrest.key · team_state.json · 限频账本</text>
+  <rect class="node" x="790" y="716" width="340" height="30"/><text class="nodet" x="960" y="736">config.json ｜ logs\（run/task 日志 · 截图）｜ auth_backups\</text>
+
+  <!-- 主干调用箭头 -->
+  <path class="arrow" d="M590,200 L590,232"/>
+  <path class="arrow" d="M590,312 L590,346"/>
+  <path class="arrow" d="M328,432 L328,466" />
+  <path class="arrow" d="M287,632 L287,432"/>
+  <text class="lbl" x="598" y="218">HTTP action 调用 run/claim/capture_all</text>
+  <text class="lbl" x="598" y="330">阶段编排 0/1/2/3</text>
+  <text class="lbl" x="260" y="450">API 管线 → 数据返回</text>
+
+  <path class="arrowO" d="M472,632 L712,708"/>
+  <text class="lbl" x="548" y="668" fill="#e67e22">凭证落盘/读取</text>
+  <path class="arrowO" d="M672,674 L672,708"/>
+  <text class="lbl" x="684" y="690" fill="#e67e22">atrest.key 读取（缺失→P0）</text>
+
+  <path class="arrowT" d="M185,92 L86,622 L120,632"/>
+  <text class="lbl" x="60" y="610" fill="#0ea5a4">CDP 连接(9222)</text>
+  <path class="arrowT" d="M885,92 L912,300 L1150,360"/>
+  <text class="lbl" x="930" y="300" fill="#0ea5a4">API 请求(301/401)</text>
+  <path class="arrowO" d="M520,92 L560,300 L820,620 L810,632"/>
+  <text class="lbl" x="640" y="300" fill="#e67e22">登录态读取(信封)</text>
+</svg>
+</div>
+
+<!-- ======================= 三、任务执行流程图 ======================= -->
+<h2>三、任务执行流程图（单账号主线）</h2>
+<div class="flow">
+<div class="legend">
+  <span><i style="background:#2f6fed"></i>API 管线段（阶段一）</span>
+  <span><i style="background:#0ea5a4"></i>UI 驱动段（阶段二）</span>
+  <span><i style="background:#d92d20"></i>缺陷点</span>
+  <span><i style="background:#e67e22"></i>结果落盘</span>
+</div>
+<svg viewBox="0 0 1180 620" xmlns="http://www.w3.org/2000/svg" font-family="'Microsoft YaHei',sans-serif">
+  <defs>
+    <marker id="ab" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2f6fed"/></marker>
+    <marker id="at" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#0ea5a4"/></marker>
+    <marker id="ao" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e67e22"/></marker>
+  </defs>
+  <style>
+    .sn{fill:#fff;stroke:#8fa6c8;stroke-width:1.2;rx:8}
+    .snt{font-size:11.5px;fill:#1a2333;text-anchor:middle}
+    .sg{fill:#eef3fa;stroke:#c9d5e7;stroke-width:1;rx:8}
+    .sgt{font-size:12px;font-weight:700;fill:#33415c}
+  </style>
+
+  <rect class="sg" x="20" y="16" width="1140" height="52"/>
+  <text class="sgt" x="40" y="40">入口</text>
+  <rect class="sn" x="470" y="26" width="240" height="34"/><text class="snt" x="590" y="48">auto_buddy.py · run_all.run()（遍历启用账号）</text>
+
+  <rect class="sg" x="20" y="84" width="300" height="150"/>
+  <text class="sgt" x="40" y="108">阶段0 · CDP 准备</text>
+  <rect class="sn" x="50" y="120" width="130" height="34"/><text class="snt" x="115" y="142">拉起 client</text>
+  <rect class="sn" x="200" y="120" width="100" height="34"/><text class="snt" x="250" y="142">connect 9222</text>
+  <rect class="sn" x="50" y="166" width="250" height="34"/><text class="snt" x="175" y="188">driver 就绪 · 失败自动重启客户端</text>
+
+  <rect class="sg" x="340" y="84" width="820" height="150"/>
+  <text class="sgt" x="360" y="108">阶段一 · API 管线段（missions_api · STANDARD_ORDER，每步失败温和跳过/重试）</text>
+  <rect class="sn" x="360" y="124" width="112" height="34"/><text class="snt" x="416" y="146">每日签到</text>
+  <rect class="sn" x="482" y="124" width="112" height="34"/><text class="snt" x="538" y="146">开启盲盒</text>
+  <rect class="sn" x="604" y="124" width="112" height="34"/><text class="snt" x="660" y="146">派猫猫旅行</text>
+  <rect class="sn" x="726" y="124" width="112" height="34"/><text class="snt" x="782" y="146">出行回归领取</text>
+  <rect class="sn" x="848" y="124" width="112" height="34"/><text class="snt" x="904" y="146">成长信息/余额</text>
+  <rect class="sn" x="360" y="170" width="112" height="34"/><text class="snt" x="416" y="192">成长热度点亮</text>
+  <rect class="sn" x="482" y="170" width="112" height="34"/><text class="snt" x="538" y="192">任务清单/状态</text>
+  <rect class="sn" x="604" y="170" width="234" height="34"/><text class="snt" x="721" y="192">温和消息白名单 BENIGN_CLAIM_MSG</text>
+  <rect class="sn" x="848" y="170" width="292" height="34"/><text class="snt" x="994" y="192">付费/公益一票否决 DEFAULT_PAID_CODES</text>
+  <path class="arrow" d="M474,158 L480,124" stroke="#2f6fed" marker-end="url(#ab)"/>
+  <path class="arrow" d="M594,141 L600,124" stroke="#2f6fed" marker-end="url(#ab)"/>
+
+  <rect class="sg" x="20" y="250" width="1140" height="150"/>
+  <text class="sgt" x="40" y="274">阶段二 · UI 驱动段（batch.py · adaptive 适配 · 逐任务）</text>
+  <rect class="sn" x="40" y="288" width="180" height="40"/><text class="snt" x="130" y="305">adaptive.read_named</text><text class="snt" x="130" y="321">先截断再处理</text>
+  <rect class="sn" x="240" y="288" width="180" height="40"/><text class="snt" x="330" y="305">tasks.py 任务目录</text><text class="snt" x="330" y="321">CODE_TITLES 兜底标题</text>
+  <rect class="sn" x="440" y="288" width="300" height="40"/><text class="snt" x="590" y="305">missions/*：experts  chat  team  skill</text><text class="snt" x="590" y="321">scenes  lighthouse_flow  panels</text>
+  <rect class="sn" x="760" y="288" width="200" height="40"/><text class="snt" x="860" y="305">计分/证据（S1-S9 · ok/evidence）</text><text class="snt" x="860" y="321">截图留证 → logs\screenshots</text>
+  <rect class="sn" x="980" y="288" width="160" height="40"/><text class="snt" x="1060" y="305">结算循环</text><text class="snt" x="1060" y="321">直到状态 claimed</text>
+  <rect class="sn" x="440" y="348" width="300" height="34"/><text class="snt" x="590" y="370">夜间降级 23:00–08:00 ｜ 长下拉原生滚动 ｜ 团队互斥任务错峰</text>
+
+  <rect class="sg" x="20" y="416" width="1140" height="120"/>
+  <text class="sgt" x="40" y="440">阶段三 · 收尾领取（claim_all）</text>
+  <rect class="sn" x="40" y="454" width="220" height="40"/><text class="snt" x="150" y="471">遍历 completed 任务</text><text class="snt" x="150" y="487">逐条领取 → claimed</text>
+  <rect class="sn" x="290" y="454" width="240" height="40"/><text class="snt" x="410" y="471">付费/公益任务跳过</text><text class="snt" x="410" y="487">（不触碰消费类）</text>
+  <rect class="sn hot" x="560" y="454" width="260" height="40"/><text class="snt" x="690" y="471">猫猫旅行二次检查 claim.py:22</text><text class="snt" x="690" y="487">P1：传 cred=None → 静默失效</text>
+  <rect class="sn" x="850" y="454" width="290" height="40"/><text class="snt" x="995" y="471">汇总 LATEST_JSON / SUMMARY_TXT</text><text class="snt" x="995" y="487">RUNS_LOG → 工作台展示</text>
+
+  <path class="arrow" d="M590,60 L590,84" stroke="#2f6fed" marker-end="url(#ab)"/>
+  <path class="arrow" d="M300,180 L340,180" stroke="#2f6fed" marker-end="url(#ab)"/>
+  <path class="arrow" d="M590,234 L590,250" stroke="#0ea5a4" marker-end="url(#at)"/>
+  <path class="arrow" d="M590,400 L590,416" stroke="#e67e22" marker-end="url(#ao)"/>
+  <text class="snt" x="600" y="238" style="font-size:11px">进入 UI 驱动</text>
+  <text class="snt" x="600" y="408" style="font-size:11px">进入收尾领取</text>
+</svg>
+</div>
+
+<!-- ======================= 四、工作流程图 ======================= -->
+<h2>四、工作流程图（用户/运维视角）</h2>
+<div class="flow">
+<div class="legend">
+  <span><i style="background:#2f6fed"></i>启动链路</span>
+  <span><i style="background:#0ea5a4"></i>配置链路</span>
+  <span><i style="background:#9aa5b5"></i>日常执行</span>
+  <span><i style="background:#d92d20"></i>续期故障链路（P0）</span>
+</div>
+<svg viewBox="0 0 1180 470" xmlns="http://www.w3.org/2000/svg" font-family="'Microsoft YaHei',sans-serif">
+  <defs>
+    <marker id="wb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2f6fed"/></marker>
+    <marker id="wt" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#0ea5a4"/></marker>
+    <marker id="wg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9aa5b5"/></marker>
+    <marker id="wr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#d92d20"/></marker>
+  </defs>
+  <style>
+    .wn{fill:#fff;stroke:#8fa6c8;stroke-width:1.2;rx:8}
+    .wnt{font-size:11.5px;fill:#1a2333;text-anchor:middle}
+    .wg{fill:#f6f9fe;stroke:#c9d5e7;stroke-width:1;rx:8}
+    .wgt{font-size:12px;font-weight:700;fill:#33415c}
+  </style>
+
+  <rect class="wg" x="20" y="16" width="1140" height="92"/>
+  <text class="wgt" x="40" y="40">① 启动链路</text>
+  <rect class="wn" x="60" y="54" width="170" height="36"/><text class="wnt" x="145" y="76">一键启动 .cmd</text>
+  <rect class="wn" x="250" y="54" width="200" height="36"/><text class="wnt" x="350" y="76">拉起客户端 + 常驻 web 服务</text>
+  <rect class="wn" x="470" y="54" width="220" height="36"/><text class="wnt" x="580" y="76">127.0.0.1 工作台（扫描/执行/续期）</text>
+  <rect class="wn" x="710" y="54" width="200" height="36"/><text class="wnt" x="810" y="76">定时 run_now.bat / API run</text>
+  <path class="arrow" d="M232,72 L248,72" stroke="#2f6fed" marker-end="url(#wb)"/>
+
+  <rect class="wg" x="20" y="124" width="1140" height="92"/>
+  <text class="wgt" x="40" y="148">② 配置链路</text>
+  <rect class="wn" x="60" y="162" width="200" height="36"/><text class="wnt" x="160" y="184">扫描登录态 discover_accounts</text>
+  <rect class="wn" x="280" y="162" width="180" height="36"/><text class="wnt" x="370" y="184">添加账号 add_account_by_uid</text>
+  <rect class="wn" x="480" y="162" width="180" height="36"/><text class="wnt" x="570" y="184">抓凭证 capture → cred.json</text>
+  <rect class="wn" x="680" y="162" width="220" height="36"/><text class="wnt" x="790" y="184">同步昵称 sync_display_name（防 UID 数字串）</text>
+  <rect class="wn" x="920" y="162" width="200" height="36"/><text class="wnt" x="1020" y="184">自动入库 auto_sync_accounts</text>
+
+  <rect class="wg" x="20" y="232" width="1140" height="104"/>
+  <text class="wgt" x="40" y="256">③ 日常执行（每账号）</text>
+  <rect class="wn" x="60" y="270" width="140" height="36"/><text class="wnt" x="130" y="292">阶段0 CDP</text>
+  <rect class="wn" x="220" y="270" width="230" height="36"/><text class="wnt" x="335" y="292">阶段1 API 管线（签到→盲盒→旅行→…）</text>
+  <rect class="wn" x="470" y="270" width="250" height="36"/><text class="wnt" x="595" y="292">阶段2 UI 批量（19 项成长任务/已启用）</text>
+  <rect class="wn" x="740" y="270" width="200" height="36"/><text class="wnt" x="840" y="292">阶段3 收尾领取 + 旅行复检(P1)</text>
+  <rect class="wn" x="960" y="270" width="170" height="36"/><text class="wnt" x="1045" y="292">报告/积分展示</text>
+
+  <rect class="wg" x="20" y="352" width="1140" height="100"/>
+  <text class="wgt" x="40" y="376">④ 续期与维护链路（P0 故障路径）</text>
+  <rect class="wn" x="60" y="390" width="200" height="36"/><text class="wnt" x="160" y="412">客户端登录 → 「续期所有凭证」</text>
+  <rect class="wn hot" x="280" y="390" width="250" height="36"/><text class="wnt" x="405" y="412">P0：atrest.key 缺失 → 信封覆写 cred.json</text>
+  <rect class="wn hot" x="550" y="390" width="230" height="36"/><text class="wnt" x="665" y="412">API 全 401 → 账号查询失败/任务列表空</text>
+  <rect class="wn" x="800" y="390" width="330" height="36"/><text class="wnt" x="965" y="412">修复：恢复 atrest.key + creds.py 拒写信封 + 重启服务</text>
+  <path class="arrow" d="M262,408 L278,408" stroke="#d92d20" marker-end="url(#wr)"/>
+  <path class="arrow" d="M532,408 L548,408" stroke="#d92d20" marker-end="url(#wr)"/>
+  <path class="arrow" d="M782,408 L798,408" stroke="#d92d20" marker-end="url(#wr)"/>
+</svg>
+</div>
+
+<!-- ======================= 五、逐层校验结果 ======================= -->
+<h2>五、逐层校验结果（多维度视角）</h2>
+
+<div class="card">
+<h3>5.1 core 层（config / api / creds / atrest / cdp / logs）</h3>
+<table>
+<tr><th style="width:180px">校验维度</th><th>结论</th><th style="width:110px">判定</th></tr>
+<tr><td>凭证链路正确性</td><td><b>P0 根因所在</b>：<span class="file">creds.py:62-68</span> 在 <code>atrest_key() is None</code> 时静默跳过解密；<span class="file">:235</span> 将 {$wbEncrypted} 信封原样覆写进 <span class="file">accounts/*.cred.json</span>；<span class="file">:93-94</span> load_cred 只校验 accessToken 非空，放行信封 → api.py 请求头变成 <code>Bearer {'$wbEncrypted':1,…}</code> → 全部 401</td><td><span class="tag t-p0">P0 阻断</span></td></tr>
+<tr><td>密钥缓存语义</td><td><b>P2</b>：<span class="file">atrest.py:282-283</span> 无论是否取到 key 都置 <code>_key_cache["loaded"]=True</code>；进程内首次失败后，即使补上 key 文件仍返回 None，常驻 web 服务必须重启才生效</td><td><span class="tag t-p2">P2 中</span></td></tr>
+<tr><td>AES-GCM 实现正确性</td><td>atrest.py 纯标准库 AES-256-GCM 按客户端 app.asar 逐字节核对实现；用旧项目密钥实测解密全部凭证成功（RS256 JWT 有效），算法本身正确</td><td><span class="verdict v-ok">通过</span></td></tr>
+<tr><td>HTTP 层 401 闭环</td><td>api.py 超时 20s、网络异常返回 <code>(-1, error)</code>；401 属「温和失败」被白名单跳过 → 症状表现为「查不到任务列表/积分不变」而非报错，符合用户观察</td><td><span class="verdict v-ok">链路确证</span></td></tr>
+<tr><td>静态告警甄别</td><td>missions_api:244 / cdp:292 / switch:126 等告警经逐行核对为链式 <code>.get()</code>、staticmethod 静态推断误报，<code>or {}</code> 兜底后运行时不崩</td><td><span class="verdict v-ok">误报</span></td></tr>
+</table>
+</div>
+
+<div class="card">
+<h3>5.2 engine 层（tasks / missions_api / active / driver / switch / connector_oauth）</h3>
+<table>
+<tr><th style="width:180px">校验维度</th><th>结论</th><th style="width:110px">判定</th></tr>
+<tr><td>任务状态机</td><td>STATUS_LABEL 五态映射（not_accepted/accepted/in_progress/completed/claimed）正确；BENIGN_CLAIM_MSG 白名单把温和返回当「跳过」而非失败，语义正确</td><td><span class="verdict v-ok">通过</span></td></tr>
+<tr><td>付费/公益护栏</td><td>DEFAULT_PAID_CODES + 关键词一票否决（捐款/充值/消费/开通会员等），防止误触碰计费行为——设计合理且实现正确</td><td><span class="verdict v-ok">通过</span></td></tr>
+<tr><td>旅行接口签名</td><td>missions_api 的 <code>task_buddy_travel_dispatch(cred, account, check_only)</code> 首参为凭证必传；内部异常统一捕获为 FAIL——这是 P1 借以「静默消失」的机制</td><td><span class="verdict v-ok">确证</span></td></tr>
+<tr><td>CDP 驱动健壮性</td><td>connect 失败自动重启客户端；截图失败自动 close 重连；pending 消息先截断再处理防渲染线程被打爆——健壮性良好</td><td><span class="verdict v-ok">通过</span></td></tr>
+<tr><td>连接器授权</td><td>connector_oauth 全自动授权链路（关 Edge→抢 --single-argument→自控 Edge→微信登录→窗口级点允许→workbuddy:// 回调）逻辑闭环，固定 profile 免二次验证</td><td><span class="verdict v-ok">通过</span></td></tr>
+</table>
+</div>
+
+<div class="card">
+<h3>5.3 missions 层（experts / team / skill / scenes / chat / lighthouse_flow / panels）</h3>
+<table>
+<tr><th style="width:180px">校验维度</th><th>结论</th><th style="width:110px">判定</th></tr>
+<tr><td>任务计分语义</td><td>experts「召唤本身不计分，必须再发一句」；skill_1「点使用/打开卡片非 + 安装」；team 需 3 个<b>不同</b>团队且整轮收尾后计分——均与提分机制相符</td><td><span class="verdict v-ok">通过</span></td></tr>
+<tr><td>异常/超时处理</td><td>JS 只点击立即返回，等待交给 Python sleep（首屏阻塞约 45s）；pre_must_ok 前置失败立刻中止；in_night 夜间降级——节奏控制合理</td><td><span class="verdict v-ok">通过</span></td></tr>
+<tr><td>团队账本</td><td>data/team_state.json 永久尝试账本 + TEAM_LEDGER_SIGNS 会话标题→团队名比对，防重复计数错误（此前修复已验证）</td><td><span class="verdict v-ok">通过</span></td></tr>
+<tr><td>灯塔恢复流程</td><td>lighthouse_flow 恢复「搜索→召唤→发一句」三步，9/22 授权闸门已移除（旧版不授权，闸门会卡死）——与实测一致</td><td><span class="verdict v-ok">通过</span></td></tr>
+<tr><td>按钮定位</td><td>「更多→灵感→同款」用 CDP Input.dispatchMouseEvent wiggle hover 而非硬编码坐标——抗 UI 变动能力强</td><td><span class="verdict v-ok">通过</span></td></tr>
+</table>
+</div>
+
+<div class="card">
+<h3>5.4 orchestrator 层（run_all / batch / claim / adaptive）</h3>
+<table>
+<tr><th style="width:180px">校验维度</th><th>结论</th><th style="width:110px">判定</th></tr>
+<tr><td>主流程编排</td><td>阶段 0→1→2→3 依序执行，阶段一 API 管线与阶段二 UI 批量职责清晰；批量失败不中断后续账号</td><td><span class="verdict v-ok">通过</span></td></tr>
+<tr><td>收尾领取逻辑</td><td><b>P1 活 bug</b>：<span class="file">claim.py:22</span> 调用 <code>MA.task_buddy_travel_dispatch(None, account=…)</code> 硬编码 <code>cred=None</code> → 函数内 <code>cred.get("auth")</code> 抛 AttributeError → 被 except 吞掉返回 FAIL → 「收尾再检查猫猫旅行」<b>从未真正执行</b>，与代码注释（2026-09-25）及流程图声称不符</td><td><span class="tag t-p1">P1 高</span></td></tr>
+<tr><td>任务适配</td><td>adaptive 的 MANUAL_ONLY / IMPLEMENTED 清单与 missions 模块实现一致；read_named 先截断再取几何</td><td><span class="verdict v-ok">通过</span></td></tr>
+<tr><td>并发与锁</td><td>web 层 action_* 全局 LOCK 串行化，避免 CDP/凭证写冲突</td><td><span class="verdict v-ok">通过</span></td></tr>
+</table>
+</div>
+
+<div class="card">
+<h3>5.5 web 层（server.py 工作台）</h3>
+<table>
+<tr><th style="width:180px">校验维度</th><th>结论</th><th style="width:110px">判定</th></tr>
+<tr><td>续期接口</td><td><span class="file">web/server.py:942-949</span> action_capture_all → CR.capture_all_possible → per-account capture，即 P0 故障触发入口；<span class="file">:918-939</span> 单账号续期同样受影响</td><td><span class="verdict v-warn">P0 上游</span></td></tr>
+<tr><td>接口面覆盖</td><td>扫描/添加/移除/启停/执行/查询/续期/打开客户端等动作齐全，返回结构统一 ok/error/message</td><td><span class="verdict v-ok">通过</span></td></tr>
+<tr><td>登录态提示</td><td>凭证缺失时返回 need_login + hint，引导扫码登录——UX 合理</td><td><span class="verdict v-ok">通过</span></td></tr>
+</table>
+</div>
+
+<div class="card">
+<h3>5.6 docs 层与工具（流程图一致性 / build_opensource / screenshot_record）</h3>
+<table>
+<tr><th style="width:180px">校验维度</th><th>结论</th><th style="width:110px">判定</th></tr>
+<tr><td>流程图 vs 实际行为</td><td>docs 流程图声称「收尾领取时再检查一次猫猫旅行」——实际该分支因 P1 从不执行；WORKFLOW.md 主体与实现吻合，仅旅行复检语义失实</td><td><span class="tag t-p1">不符</span></td></tr>
+<tr><td>开源打包</td><td><b>P3</b>：build_opensource.py 的 INCLUDE 引用 <code>skill/</code>、<code>tests/</code> 目录，当前项目<b>不存在</b>（目录缺失被静默跳过）；脱敏正则有 PHONE/JWT，排除 data/accounts/logs，方向正确</td><td><span class="tag t-p3">低</span></td></tr>
+<tr><td>截图留证</td><td>screenshot_record 固定间隔截图 + .stop 文件停止 + 失败重连，机制完整</td><td><span class="verdict v-ok">通过</span></td></tr>
+<tr><td>备份与追溯</td><td>备份包 data/ 内无 atrest.key（密钥在备份前已缺失，非备份遗漏）；备份包内凭证已是信封态（覆写发生在备份窗口内）——佐证 P0 时间线</td><td><span class="verdict v-ok">确证</span></td></tr>
+</table>
+</div>
+
+<!-- ======================= 六、问题清单与修复方案 ======================= -->
+<h2>六、问题清单（按优先级）与修复方案</h2>
+
+<div class="card">
+<table>
+<tr><th style="width:64px">级别</th><th style="width:330px">问题</th><th>根因与证据</th><th style="width:250px">修复方案（T5 落地）</th></tr>
+<tr>
+  <td><span class="tag t-p0">P0</span></td>
+  <td><b>「续期所有凭证」后账号信息全部查询失败、任务列表为空</b></td>
+  <td>atrest.key 缺失 → creds.py:62-68 跳过解密 → :235 信封覆写 → api.py 拼出 <code>Bearer {'$wbEncrypted':…}</code> → 全员 401。<br>证据：旧项目 key 实测可解密全部凭证（有效 JWT，余 27.6–55.0 天）；备份包无 key；cred.json 时间为续期窗口内</td>
+  <td>① 恢复 <span class="file">data\atrest.key</span>（复制自 buddy-auto-v2，已验证可解密）<br>② 加固 creds.py：无 key 时 capture 显式失败并<b>拒绝覆写</b>信封<br>③ load_cred 检测 envelope 未解密 → 返回明确错误<br>④ 重启常驻 web 服务</td>
+</tr>
+<tr>
+  <td><span class="tag t-p1">P1</span></td>
+  <td><b>收尾「猫猫旅行二次检查」静默失效（流程图 ≠ 实际行为）</b></td>
+  <td>claim.py:22 传 <code>cred=None</code> → missions_api 内 <code>None.get("auth")</code> 抛 AttributeError → except 吞掉返回 FAIL → 分支恒不满足，注释承诺的功能从未执行</td>
+  <td>claim_account 中先用 <code>CR.load_cred(account)</code> 获取凭证再传给 dispatch；失败时如实上报而非静默跳过</td>
+</tr>
+<tr>
+  <td><span class="tag t-p2">P2</span></td>
+  <td><b>atrest.load_key 缺失也置缓存位，补 key 不生效</b></td>
+  <td>atrest.py:282-283 无条件 <code>loaded=True</code>；常驻进程首次无 key 后，补上文件仍返回 None，必须重启</td>
+  <td>无 key 时不置缓存（或按文件 mtime 失效重读）；load_key 结果变化时自动重载</td>
+</tr>
+<tr>
+  <td><span class="tag t-p3">P3</span></td>
+  <td><b>build_opensource 引用不存在的 skill/、tests/ 目录</b></td>
+  <td>INCLUDE 清单含 skill/、tests/，当前项目无此目录，复制被静默跳过；开源包会缺少本应打包的示例/测试</td>
+  <td>目录存在性守卫 + 缺失告警；按实际目录刷新 INCLUDE 清单</td>
+</tr>
+<tr>
+  <td><span class="tag t-p3">P3</span></td>
+  <td><b>多处注释/文档与实现轻微漂移</b></td>
+  <td>如 claim 注释（2026-09-25）宣称的旅行复检实际失效、个别常量注释过期</td>
+  <td>修复后同步更新注释与 docs 流程图（旅行复检以真实执行为准）</td>
+</tr>
+</table>
+</div>
+
+<div class="note">修复边界：本次修复仅限「凭证解密与落盘契约、旅行复检传参、密钥缓存」三项行为缺陷及文档同步，<b>不改变任何业务事实、任务语义与计分规则</b>；优化遵循项目既有零第三方依赖、纯标准库风格。所有修改将按「服务端真实积分/接口响应」作为验收凭证，不以工具成功代替。</div>
+
+<footer>本报告由全栈分层审查生成：实证证据来自逐文件精读、关键行号核对、跨文件调用链追踪、旧项目密钥交叉解密验证与静态告警逐条甄别。报告编制 2026-09-28。</footer>
+</div>
+</body>
+</html>

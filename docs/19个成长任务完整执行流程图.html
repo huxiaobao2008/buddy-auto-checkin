@@ -1,0 +1,223 @@
+<html style="margin:0;padding:0;">
+<title>WorkBuddy自动任务最终完整流程图</title>
+<div style="width:100%;box-sizing:border-box;padding:24px;background:#f8fafc;font-family:'Microsoft YaHei',sans-serif;">
+  <h2 style="text-align:center;color:#1e293b;margin:0 0 8px 0;">WorkBuddy 19个成长任务完整执行流程（最终版）</h2>
+  <p style="text-align:center;color:#64748b;margin:0 0 30px 0;font-size:14px;">阶段一全账号串行跑API；阶段二逐账号串行跑所有UI；单客户端仅支持串行操作，不并行</p>
+
+  <!-- 启动 -->
+  <div style="display:flex;justify-content:center;margin-bottom:16px;">
+    <div style="background:#3b82f6;color:white;padding:14px 32px;border-radius:8px;font-weight:500;min-width:350px;text-align:center;">
+      启动：清理旧进程 → 拉起带CDP的客户端 → 启动Web服务 → 扫描所有启用账号
+    </div>
+  </div>
+  <div style="text-align:center;color:#94a3b8;margin-bottom:24px;">↓</div>
+
+  <!-- 阶段一 API -->
+  <div style="background:white;border:2px solid #10b981;border-radius:10px;padding:20px;margin-bottom:24px;">
+    <h3 style="color:#047857;margin:0 0 16px 0;">阶段一：纯API管线（全账号串行，直接调接口，不操作UI）</h3>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px;">
+      <div style="background:#d1fae5;padding:10px 14px;border-radius:6px;font-size:13.5px;">每日签到</div>
+      <span style="color:#94a3b8;">→</span>
+      <div style="background:#d1fae5;padding:10px 14px;border-radius:6px;font-size:13.5px;">领取Buddy</div>
+      <span style="color:#94a3b8;">→</span>
+      <div style="background:#d1fae5;padding:10px 14px;border-radius:6px;font-size:13.5px;">开启盲盒</div>
+      <span style="color:#94a3b8;">→</span>
+      <div style="background:#d1fae5;padding:10px 14px;border-radius:6px;font-size:13.5px;">派猫猫旅行</div>
+      <span style="color:#94a3b8;">→</span>
+      <div style="background:#d1fae5;padding:10px 14px;border-radius:6px;font-size:13.5px;">出行到达奖励领取</div>
+      <span style="color:#94a3b8;">→</span>
+      <div style="background:#d1fae5;padding:10px 14px;border-radius:6px;font-size:13.5px;">成长伙伴状态检查</div>
+      <span style="color:#94a3b8;">→</span>
+      <div style="background:#d1fae5;padding:10px 14px;border-radius:6px;font-size:13.5px;">成长热度点亮</div>
+      <span style="color:#94a3b8;">→</span>
+      <div style="background:#d1fae5;padding:10px 14px;border-radius:6px;font-size:13.5px;">成长任务接取</div>
+    </div>
+    <div style="background:#f0fdf4;padding:12px;border-radius:6px;font-size:13px;color:#166534;line-height:1.7;">
+      ✅ 单个账号把以上API任务全部按顺序跑完，自动切换下一个账号；所有账号API阶段全部完成后，才进入阶段二，逐账号执行UI任务。所有任务统一逻辑，无特殊标注，已完成自动跳过。
+    </div>
+  </div>
+  <div style="text-align:center;color:#94a3b8;margin-bottom:24px;">↓ 所有账号API完成，逐账号进入UI阶段</div>
+
+  <!-- UI初始 -->
+  <div style="background:white;border:2px solid #f59e0b;border-radius:10px;padding:20px;margin-bottom:24px;">
+    <h3 style="color:#b45309;margin:0 0 16px 0;text-align:center;">阶段二：UI管线（逐账号串行，单客户端严格串行操作，绝对不并行）</h3>
+    <div style="display:flex;justify-content:center;margin-bottom:16px;">
+      <div style="background:#fef3c7;padding:12px 24px;border-radius:8px;font-weight:500;">
+        切换到目标账号 → 账号闸校验UID匹配 → 拉取全部任务+服务端最新进度，统一分类标记
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;">
+      <div style="background:#dcfce7;border-radius:8px;padding:14px;text-align:center;">
+        <div style="font-weight:500;color:#166534;margin-bottom:6px;">已完成</div>
+        <div style="font-size:12.5px;color:#374151;">服务端进度达标，直接跳过不执行</div>
+      </div>
+      <div style="background:#fee2e2;border-radius:8px;padding:14px;text-align:center;">
+        <div style="font-weight:500;color:#991b1b;margin-bottom:6px;">需人工跳过</div>
+        <div style="font-size:12.5px;color:#374151;">扫码/付费/无积分，标记后不执行</div>
+      </div>
+      <div style="background:#fef3c7;border-radius:8px;padding:14px;text-align:center;">
+        <div style="font-weight:500;color:#92400e;margin-bottom:6px;">待完成</div>
+        <div style="font-size:12.5px;color:#374151;">其余所有任务进入串行执行队列</div>
+      </div>
+    </div>
+    <div style="margin-top:14px;background:#fffbeb;padding:10px;border-radius:6px;font-size:13px;color:#92400e;line-height:1.7;">
+      <strong>串行铁则：</strong>一个任务操作完成、验证会话真的创建、任务已经开始执行、页面状态稳定后，再操作下一个任务，不批量、不并行，避免页面混乱、找不到入口。
+    </div>
+  </div>
+  <div style="text-align:center;color:#94a3b8;margin-bottom:24px;">↓ 按顺序串行执行UI任务</div>
+
+  <!-- UI 第一步 普通会话任务 -->
+  <div style="background:white;border:2px solid #8b5cf6;border-radius:10px;padding:20px;margin-bottom:24px;">
+    <h3 style="color:#6d28d9;margin:0 0 12px 0;">UI第一步：串行执行普通会话型任务（确认发起成功即走，不等AI完整回复）</h3>
+    <div style="background:#f5f3ff;padding:12px;border-radius:6px;margin-bottom:16px;font-size:13px;color:#5b21b6;line-height:1.7;">
+      通用判断：点击前判断页面/按钮加载完成；点发送后验证会话创建、任务发起成功，再进入下一个，点击失效立刻重试，不盲发。
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div style="border:1px solid #ddd6fe;border-radius:8px;padding:12px;">
+        <div style="font-weight:500;color:#5b21b6;margin-bottom:8px;">1. 体验「设计创意模式」 create_canvas</div>
+        <div style="font-size:12.5px;color:#374151;line-height:1.6;">
+          新建任务 → 判断首页加载完成 → 不写死固定分类，动态遍历所有分类，优先选模板最多的日常任务分类（代码开发下仅网站设计有模板，其余无模板分类跳过）→ 排除图片/视频/品牌设计等所有无模板分类 → 判断二级菜单加载、模板列表出现 → 选中模板点「做同款」，替换弹窗点替换 → 判断提示词填入 → 点发送，验证发起成功，进入下一个任务
+        </div>
+      </div>
+      <div style="border:1px solid #ddd6fe;border-radius:8px;padding:12px;">
+        <div style="font-weight:500;color:#5b21b6;margin-bottom:8px;">2. 探索优秀灵感 playbook_prompt</div>
+        <div style="font-size:12.5px;color:#374151;line-height:1.6;">
+          鼠标hover左侧「更多」→ 判断浮层弹出 → 点灵感入口 → 判断灵感广场加载完成 → 选任意灵感卡片点入 → 判断卡片详情加载 → 点「做同款」→ 判断对话页打开、提示词填入 → 点发送 → 验证会话发起成功，再进入下一个任务
+        </div>
+      </div>
+      <div style="border:1px solid #ddd6fe;border-radius:8px;padding:12px;">
+        <div style="font-weight:500;color:#5b21b6;margin-bottom:8px;">4. 体验「资料库」 Library_read</div>
+        <div style="font-size:12.5px;color:#374151;line-height:1.6;">
+          点左侧资料库入口 → 判断面板加载、树形菜单展开完成 → 按顺序依次打开6份文档：每打开一份判断文档加载完成，滚动到页面最底部，确认真实读完，再打开下一份 → 6份全部读完后，判断最后一份文档底部外链出现，点击「进一步了解WorkBuddy资料库」外链 → 判断新页面打开，将外链页面滚动到最底部读完 → 验证完成，再进入下一个任务
+        </div>
+      </div>
+      <div style="border:1px solid #ddd6fe;border-radius:8px;padding:12px;">
+        <div style="font-weight:500;color:#5b21b6;margin-bottom:8px;">5. 体验「腾讯轻量云」专家 Expert_lighthouse</div>
+        <div style="font-size:12.5px;color:#374151;line-height:1.6;">
+          打开专家·技能·连接器 → 判断页面加载完成 → 搜索「腾讯轻量云」→ 判断搜索结果加载完成 → 点召唤 → 判断授权弹窗出现，完成授权（已登录无需扫码）→ 判断对话页打开，按普通专家规则处理 → 点发送 → 验证会话发起成功，再进入下一个任务
+        </div>
+      </div>
+      <div style="border:1px solid #ddd6fe;border-radius:8px;padding:12px;">
+        <div style="font-weight:500;color:#5b21b6;margin-bottom:8px;">11. 体验「GLM-5.2」模型 Model_chat_GLM5.2</div>
+        <div style="font-size:12.5px;color:#374151;line-height:1.6;">
+          新建任务 → 判断新建页加载完成 → 先切换到其他免费模型，判断切换成功 → 再切回GLM-5.2，判断模型切换生效 → 输入一句话 → 点发送 → 验证会话发起成功，再进入下一个任务
+        </div>
+      </div>
+      <div style="border:1px solid #ddd6fe;border-radius:8px;padding:12px;">
+        <div style="font-weight:500;color:#5b21b6;margin-bottom:8px;">18. 使用5个模板 template_5</div>
+        <div style="font-size:12.5px;color:#374151;line-height:1.6;">
+          新建任务 → 判断首页加载完成 → 和设计创意模式逻辑一致，不写死固定入口，动态遍历分类，优先扫描模板最多的日常任务分类（代码开发下仅网站设计有模板，其余无模板跳过）→ 自动扫描所有可用模板，读取账号级全局模板账本：灵感任务、设计创意模式以及所有其他任务里用过的模板统一标记，仅筛选该账号在任何任务里都未使用过的模板，排除所有无模板分类 → 判断二级菜单加载、模板列表显示 → 依次选5个未用过的不同模板：每个点「做同款」、处理替换弹窗，提示词填入后发送，验证发起成功并标记该模板已用，再选下一个 → 5个全部串行发完，进入下一个任务
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- UI 第二步 专家 专家团 -->
+  <div style="background:white;border:2px solid #f59e0b;border-radius:10px;padding:20px;margin-bottom:24px;">
+    <h3 style="color:#b45309;margin:0 0 16px 0;">UI第二步：串行执行普通专家、专家团任务</h3>
+    <div style="display:flex;flex-direction:column;gap:14px;">
+      <div style="border:1px solid #fde68a;border-radius:8px;padding:14px;">
+        <div style="font-weight:500;color:#92400e;margin-bottom:10px;">17. 召唤5次普通专家 expert_5</div>
+        <div style="font-size:12.5px;color:#374151;line-height:1.7;">
+          打开专家中心「专家」tab → 判断专家列表加载完成 → 依次选5个该账号未召唤过的专家，逐个串行操作：保证专家直接完成交付，不出现反问、索要资料、要求确认方案的情况<br>
+          点发送后验证会话发起成功，立刻召唤下一个专家，不等完整回复，5个全部串行发完，再进入下一个任务
+        </div>
+      </div>
+      <div style="border:1px solid #fde68a;border-radius:8px;padding:14px;">
+        <div style="font-weight:500;color:#92400e;margin-bottom:10px;">13. 召唤3次专家团 Expert_team_use_3</div>
+        <div style="font-size:12.5px;color:#374151;line-height:1.7;">
+          打开专家中心切「专家团」tab → 判断团队列表加载完成 → 依次选3个该账号未召唤过的不同团队，逐个串行操作：<br>
+          点团队卡片召唤 → 勾选「我已知悉确认」→ 点继续使用 → 判断对话页打开<br>
+          <strong>必须清空输入框内原有预填引导语</strong>，只发送「请让你们团队每个成员介绍一下自己的团队能力。」<br>
+          点发送后验证会话发起成功，立刻召唤下一个团队，不等完整回复，3个全部串行发完，再进入下一个任务
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- UI 第三步 面板任务 -->
+  <div style="background:white;border:2px solid #ec4899;border-radius:10px;padding:20px;margin-bottom:24px;">
+    <h3 style="color:#be185d;margin:0 0 16px 0;">UI第三步：串行执行面板操作类任务</h3>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div style="border:1px solid #fbcfe8;border-radius:8px;padding:12px;">
+        <div style="font-weight:500;color:#9d174d;margin-bottom:8px;">7. 体验「和平精英」主题 Hp_Appearance</div>
+        <div style="font-size:12.5px;color:#374151;line-height:1.6;">
+          点左下角账号头像进入外观面板 → 判断面板加载完成 → 先选择任意其他主题，判断主题切换生效 → 再切回和平精英主题，判断切换生效 → 关闭面板，再进入下一个任务
+        </div>
+      </div>
+      <div style="border:1px solid #fbcfe8;border-radius:8px;padding:12px;">
+        <div style="font-weight:500;color:#9d174d;margin-bottom:8px;">8/9. 体验WorkBuddy「发现应用」/企鹅教师助手 Buddy_App / Buddy_App_QQ</div>
+        <div style="font-size:12.5px;color:#374151;line-height:1.6;">
+          点左上角「发现应用」→ 判断应用列表加载完成 → 点企鹅教师助手卡片 → 判断应用打开，授权弹窗点跳过 → 验证应用加载后退出 → 检查两个任务是否都计分，未计分重新进入一次，完成后再进入下一个任务
+        </div>
+      </div>
+      <div style="border:1px solid #fbcfe8;border-radius:8px;padding:12px;">
+        <div style="font-weight:500;color:#9d174d;margin-bottom:8px;">16. 尝鲜热门技能 skill_1</div>
+        <div style="font-size:12.5px;color:#374151;line-height:1.6;">
+          打开专家中心切「技能」tab → 判断技能列表加载完成 → 点「我安装的」→ 选一个已安装技能点「使用/打开」→ 判断技能成功唤起即计分，不需要发消息，完成后再进入下一个任务
+        </div>
+      </div>
+      <div style="border:1px solid #fbcfe8;border-radius:8px;padding:12px;">
+        <div style="font-weight:500;color:#9d174d;margin-bottom:8px;">19. 设置自动化任务 automation_1</div>
+        <div style="font-size:12.5px;color:#374151;line-height:1.6;">
+          点左侧「定时任务」入口 → 判断页面加载完成，点添加 → 名称填「每天提醒我喝水」，提示词填「提醒我喝水。」，频率选未来日期 → 勾选确认、选择完全访问，点创建 → 判断定时任务创建成功，<strong>等待服务端确认积分到账后</strong>，再删除该定时任务，完成后再进入下一个任务
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- UI 第四步 被动任务检查 -->
+  <div style="background:white;border:2px solid #6366f1;border-radius:10px;padding:20px;margin-bottom:24px;">
+    <h3 style="color:#4338ca;margin:0 0 12px 0;">UI第四步：被动累计任务最后检查（不提前跳过）</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div style="border:1px solid #c7d2fe;border-radius:8px;padding:14px;">
+        <div style="font-weight:500;color:#3730a3;margin-bottom:8px;">3. 桌面端对话1次 first_chat</div>
+        <div style="font-size:13px;color:#374151;line-height:1.6;">
+          拉取服务端进度，前面任务自动累计达标直接标记完成；次数不足，补1轮完整对话（用户发一句、AI回一句），验证计分
+        </div>
+      </div>
+      <div style="border:1px solid #c7d2fe;border-radius:8px;padding:14px;">
+        <div style="font-weight:500;color:#3730a3;margin-bottom:8px;">15. 和AI聊天5次 chat_5</div>
+        <div style="font-size:13px;color:#374151;line-height:1.6;">
+          拉取服务端进度统计完整对话轮数（用户发一句、AI回一句算1轮），前面任务累计达标直接标记完成；轮数不足，补够对应轮数完整对话，验证计分
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 统一复核 -->
+  <div style="display:flex;justify-content:center;margin-bottom:16px;">
+    <div style="background:#1e293b;color:white;padding:14px 32px;border-radius:8px;font-weight:500;min-width:420px;text-align:center;line-height:1.7;">
+      统一复核：再次拉取服务端全部任务进度 → 未计分任务自动补做（最多3轮）→ 一键领取所有待领取积分，确认全部到账 → 清理本次新建会话，保留用户原有内容
+    </div>
+  </div>
+  <div style="text-align:center;color:#94a3b8;margin-bottom:16px;">↓</div>
+
+  <!-- 切号判断 -->
+  <div style="background:white;border:2px solid #ef4444;border-radius:10px;padding:20px;margin-bottom:20px;">
+    <div style="text-align:center;font-weight:500;color:#991b1b;font-size:16px;margin-bottom:16px;">
+      最终判断：所有可自动化任务全部计分、所有积分全部到账？
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+      <div style="background:#fef2f2;border-radius:8px;padding:14px;text-align:center;color:#991b1b;font-size:14px;line-height:1.6;">
+        ❌ 否：继续补做未完成项，不切换账号，不按固定时间强制切走
+      </div>
+      <div style="background:#f0fdf4;border-radius:8px;padding:14px;text-align:center;color:#166534;font-size:14px;line-height:1.6;">
+        ✅ 是：记录本账号当日完成，切换下一个账号，重复UI全流程
+      </div>
+    </div>
+  </div>
+
+  <!-- 收尾 -->
+  <div style="display:flex;justify-content:center;">
+    <div style="background:#0f172a;color:white;padding:12px 30px;border-radius:8px;font-weight:500;">
+      所有账号遍历完成 → 全账号二次扫尾领取漏分 → 切回启动前账号，流程结束
+    </div>
+  </div>
+
+  <div style="margin-top:24px;padding:14px;background:#f1f5f9;border-radius:8px;font-size:13px;color:#334155;line-height:1.7;">
+    <strong>判断为需人工跳过的任务（符合条件才标记，不提前硬编码）：</strong><br>
+    6.体验公益专家（需付费捐款）、10.关注官方公众号（需微信扫码）、12.参与夜猫子活动（非夜间时段），其余所有任务正常执行，已完成自动跳过，无特殊任务。
+  </div>
+</div>
+</html>

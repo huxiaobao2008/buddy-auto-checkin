@@ -1,0 +1,1263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Buddy 工作台 · 签到与成长任务</title>
+<style>
+:root{
+  /* 全局暗色科技风 */
+  --bg:#0a0e1a; --panel:#0f1629; --line:#1a2440; --line-soft:#121d3a;
+  --text:#dce6f5; --muted:#8b9dc3; --faint:#5a6e96;
+  --accent:#4488ff; --accent-deep:#3366cc; --accent-soft:rgba(68,136,255,0.12);
+  --ok:#36F4A4; --ok-soft:rgba(54,244,164,0.10);
+  --warn:#FF6B35; --warn-soft:rgba(255,107,53,0.10);
+  --danger:#FF4444; --danger-soft:rgba(255,68,68,0.10);
+  --radius:12px; --radius-sm:9px;
+  --shadow:0 1px 2px rgba(0,0,0,.25),0 4px 14px rgba(0,0,0,.35);
+  --shadow-lg:0 4px 24px rgba(0,0,0,.45);
+  --mono:ui-monospace,"Cascadia Code",Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased}
+button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--text);
+  padding:6px 13px;border-radius:8px;cursor:pointer;transition:all .15s}
+button:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.primary:hover:not(:disabled){background:var(--accent-deep);color:#fff}
+button.ghost{background:transparent}
+button.danger{background:var(--danger);border-color:var(--danger);color:#fff}
+button.danger:hover:not(:disabled){background:#b23232;border-color:#b23232;color:#fff}
+button.danger.ghost{background:transparent;color:var(--danger)}
+button.danger.ghost:hover:not(:disabled){background:var(--danger-soft);border-color:var(--danger)}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:#d3d9e4;border-radius:4px}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ---------- 布局骨架 ---------- */
+.app{display:flex;min-height:100vh}
+.sidebar{width:216px;flex-shrink:0;background:linear-gradient(180deg,#0f1629,#0a0e1a);border-right:1px solid var(--line);
+  display:flex;flex-direction:column;position:sticky;top:0;height:100vh;box-shadow:4px 0 20px rgba(0,0,0,0.4)}
+.brand{padding:18px 18px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line-soft)}
+.brand .logo{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#4488ff,#7aa2ff);
+  display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:17px;
+  box-shadow:0 0 16px rgba(68,136,255,0.35),0 2px 6px rgba(0,0,0,0.3)}
+.brand h1{margin:0;font-size:15px;font-weight:650;color:#fff;text-shadow:0 0 8px rgba(68,136,255,0.25)}
+.brand .sub{font-size:11px;color:var(--faint);margin-top:1px}
+.nav{padding:10px 10px;display:flex;flex-direction:column;gap:2px}
+.nav button{display:flex;align-items:center;gap:9px;width:100%;border:none;background:transparent;
+  padding:9px 12px;border-radius:8px;color:var(--muted);font-size:13.5px;text-align:left;
+  transition:all .2s}
+.nav button:hover:not(:disabled){background:var(--accent-soft);color:var(--accent);box-shadow:inset 0 0 12px var(--accent-soft)}
+.nav button.active{background:var(--accent-soft);color:var(--accent);font-weight:600;box-shadow:inset 0 0 12px var(--accent-soft),0 0 8px rgba(68,136,255,0.2)}
+.nav .ic{width:18px;text-align:center;flex-shrink:0}
+.sidebar .foot{margin-top:auto;padding:12px;border-top:1px solid var(--line-soft);
+  font-size:11.5px;color:var(--faint)}
+
+.main{flex:1;min-width:0;padding:20px 24px 60px;max-width:1360px}
+@media(max-width:860px){
+  .sidebar{width:60px}
+  .brand h1,.brand .sub,.nav button span.txt,.sidebar .foot{display:none}
+  .nav button{justify-content:center;padding:10px}
+  .main{padding:14px 12px 60px}
+}
+
+/* ---------- 顶部统计与动作条 ---------- */
+.topbar{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+.topbar h2{margin:0;font-size:22px;font-weight:700;color:#fff;text-shadow:0 0 16px rgba(68,136,255,0.25)}
+.topbar .sub{color:var(--muted);font-size:12.5px;margin-top:3px}
+.stats{display:grid;grid-template-columns:repeat(5,minmax(100px,1fr));gap:12px;margin-bottom:16px}
+@media(max-width:720px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{background:linear-gradient(135deg,rgba(15,22,41,0.85),rgba(15,22,41,0.6));border:1px solid rgba(68,136,255,0.15);border-radius:var(--radius);
+  padding:14px 16px;box-shadow:var(--shadow),0 0 20px rgba(68,136,255,0.04);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  position:relative;overflow:hidden}
+.stat::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(68,136,255,0.3),transparent)}
+.stat b{display:block;font-size:24px;font-weight:700;line-height:1.25;font-variant-numeric:tabular-nums;color:#fff}
+.stat span{color:var(--muted);font-size:12px}
+.stat.accent b{color:var(--accent);text-shadow:0 0 12px rgba(68,136,255,0.4)}
+.stat.ok b{color:var(--ok);text-shadow:0 0 12px rgba(54,244,164,0.3)}
+.stat.warn b{color:var(--warn);text-shadow:0 0 12px rgba(255,107,53,0.3)}
+
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
+.modegrp{display:inline-flex;align-items:center;gap:4px;padding:3px;border:1px solid var(--line);
+  border-radius:9px;background:var(--panel)}
+.modegrp .mode-label{font-size:12px;color:var(--muted);padding:0 6px}
+.modegrp button{padding:4px 13px;border:none;background:transparent;color:var(--muted);border-radius:7px}
+.modegrp button.primary{background:var(--accent);color:#fff;box-shadow:0 0 12px rgba(68,136,255,0.3)}
+
+/* ---------- 卡片 ---------- */
+.card{background:linear-gradient(135deg,rgba(15,22,41,0.9),rgba(10,14,26,0.75));border:1px solid rgba(68,136,255,0.12);border-radius:var(--radius);
+  margin-bottom:16px;overflow:hidden;box-shadow:var(--shadow),0 0 24px rgba(68,136,255,0.04);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  position:relative;transition:all .3s}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(68,136,255,0.25),transparent)}
+.card:hover{border-color:rgba(68,136,255,0.2);box-shadow:var(--shadow-lg),0 0 30px rgba(68,136,255,0.08)}
+.card>h3{margin:0;padding:14px 18px;font-size:15px;font-weight:650;border-bottom:1px solid var(--line-soft);
+  display:flex;align-items:center;gap:8px;color:#fff;text-shadow:0 0 8px rgba(68,136,255,0.15)}
+.card>h3 small{color:var(--muted);font-weight:400;font-size:12px}
+.card .body{padding:14px 18px}
+.empty{padding:30px 16px;color:var(--muted);text-align:center;font-size:13px}
+.note{padding:10px 16px;background:var(--warn-soft);color:var(--warn);font-size:12.5px;
+  border-bottom:1px solid var(--line-soft)}
+.note:last-child{border-bottom:none}
+
+/* ---------- 客户端当前登录条 ---------- */
+.clientbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.clientbar .dot{width:9px;height:9px;border-radius:50%;background:var(--ok);flex-shrink:0;
+  box-shadow:0 0 8px rgba(54,244,164,0.5)}
+.clientbar.off .dot{background:var(--warn);box-shadow:0 0 8px rgba(255,107,53,0.4)}
+.clientbar .who{font-size:15px;font-weight:650;color:#fff}
+.clientbar .who small{color:var(--muted);font-weight:400;margin-left:6px;font-size:12.5px}
+.clientbar .sp{flex:1}
+.clientbar .meta{font-size:12px;color:var(--faint)}
+
+/* ---------- 账号网格 ---------- */
+.accgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px}
+.acc{background:linear-gradient(135deg,rgba(15,22,41,0.92),rgba(10,14,26,0.78));border:1px solid rgba(68,136,255,0.12);border-radius:var(--radius);
+  padding:14px 16px;box-shadow:var(--shadow),0 0 20px rgba(68,136,255,0.03);transition:all .25s;cursor:pointer;position:relative;
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);overflow:hidden}
+.acc::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(68,136,255,0.2),transparent)}
+.acc:hover{border-color:rgba(68,136,255,0.25);box-shadow:var(--shadow-lg),0 0 28px rgba(68,136,255,0.08);transform:translateY(-1px)}
+.acc.active{border-color:rgba(68,136,255,0.45);box-shadow:0 0 0 2px var(--accent-soft),var(--shadow-lg),0 0 30px rgba(68,136,255,0.12)}
+.acc.current-client{border-color:#ff6b35;background:linear-gradient(135deg,rgba(255,107,53,0.08),rgba(255,107,53,0.02));box-shadow:0 0 0 3px rgba(255,107,53,0.5),var(--shadow-lg),0 0 40px rgba(255,107,53,0.25)}
+.acc .head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.acc .avatar{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,rgba(68,136,255,0.2),rgba(68,136,255,0.05));color:var(--accent);
+  display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;flex-shrink:0;
+  box-shadow:0 0 12px rgba(68,136,255,0.15)}
+.acc .name{font-weight:650;font-size:14.5px;line-height:1.3;color:#fff}
+.acc .nick{font-size:11.5px;color:var(--faint);margin-top:1px;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;max-width:200px}
+.acc .badges{margin-left:auto;display:flex;gap:5px;flex-shrink:0}
+.acc .row{display:flex;align-items:center;gap:10px;margin-top:8px;font-size:12.5px;color:var(--muted)}
+.acc .row .lbl{width:56px;flex-shrink:0;color:var(--faint);font-size:11.5px}
+.acc .credits{font-variant-numeric:tabular-nums}
+.acc .credits b{font-size:15px;color:#fff}
+.acc .ops{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--line-soft)}
+.acc .ops button{padding:4px 10px;font-size:12px}
+.pbar{height:6px;background:rgba(68,136,255,0.08);border-radius:4px;overflow:hidden;flex:1;box-shadow:inset 0 1px 2px rgba(0,0,0,0.3)}
+.pbar>i{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,var(--accent),#66aaff);transition:width .4s;box-shadow:0 0 8px rgba(68,136,255,0.4)}
+.pbar>i.full{background:linear-gradient(90deg,var(--ok),#5ee5b5);box-shadow:0 0 8px rgba(54,244,164,0.4)}
+
+/* ---------- 标签 ---------- */
+.tag{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11.5px;line-height:1.7;white-space:nowrap;border:1px solid transparent}
+.tag.ok{background:var(--ok-soft);color:var(--ok);border-color:rgba(54,244,164,0.2)}
+.tag.warn{background:var(--warn-soft);color:var(--warn);border-color:rgba(255,107,53,0.2)}
+.tag.danger{background:var(--danger-soft);color:var(--danger);border-color:rgba(255,68,68,0.2)}
+.tag.mute{background:rgba(68,136,255,0.05);color:var(--muted);border-color:rgba(68,136,255,0.1)}
+.tag.now{background:var(--accent-soft);color:var(--accent);font-weight:600;border-color:rgba(68,136,255,0.2);box-shadow:0 0 8px rgba(68,136,255,0.15)}
+.tag.current-client-tag{background:rgba(255,107,53,0.15);color:#ff6b35;font-weight:700;border-color:rgba(255,107,53,0.4);box-shadow:0 0 12px rgba(255,107,53,0.25)}
+
+/* ---------- 任务面板 ---------- */
+.taskpanel{margin-top:16px;background:var(--panel);border:1px solid var(--accent);
+  border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-lg)}
+.taskpanel .thead{padding:12px 16px;background:var(--accent-soft);display:flex;align-items:center;
+  gap:10px;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+.taskpanel .thead b{font-size:14.5px}
+.taskpanel .thead .sp{flex:1}
+table{width:100%;border-collapse:collapse}
+th,td{padding:9px 14px;text-align:left;vertical-align:middle;border-bottom:1px solid var(--line-soft)}
+th{font-size:11.5px;font-weight:600;color:var(--muted);background:rgba(68,136,255,0.07);letter-spacing:.3px}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(68,136,255,0.04)}
+.grp{padding:8px 16px;font-size:12px;color:var(--muted);background:rgba(68,136,255,0.05);border-bottom:1px solid var(--line-soft);
+  border-top:1px solid var(--line-soft);letter-spacing:.2px}
+.uid{color:var(--faint);font-size:11.5px;font-family:var(--mono)}
+.pending{color:var(--warn);font-size:12px}
+
+/* ---------- 执行控制台 ---------- */
+.console-tabs{display:flex;gap:4px;padding:10px 16px 0;border-bottom:1px solid var(--line-soft)}
+.console-tabs button{border:none;background:transparent;padding:7px 13px;border-radius:8px 8px 0 0;
+  color:var(--muted);font-size:13px;border-bottom:2px solid transparent}
+.console-tabs button.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600;background:var(--accent-soft)}
+.console-log{margin:0;padding:14px 16px;max-height:420px;overflow:auto;white-space:pre-wrap;
+  font:12.5px/1.6 var(--mono);background:#0d1424;color:#dce6f5;border-radius:0 0 var(--radius) var(--radius)}
+.jobstat{display:flex;align-items:center;gap:8px;padding:10px 16px;font-size:12.5px;color:var(--muted)}
+.jobstat .pulse{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 1.2s infinite}
+.jobstat .pulse.done{background:var(--ok);animation:none}
+.jobstat .pulse.stop{background:var(--warn);animation:none}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ---------- 执行控制台扩展（暗色科技风管道） ---------- */
+.console-pipeline{background:#0a0e1a;color:#dce6f5;border-radius:0 0 var(--radius) var(--radius);min-height:240px;overflow:hidden;display:flex;flex-direction:column}
+.flow-header{display:flex;align-items:center;gap:12px;padding:12px 16px;background:#0f1629;border-bottom:1px solid rgba(54,244,164,0.1)}
+.flow-header h3{margin:0;font-size:14px;color:#36F4A4;font-weight:600}
+.flow-header .status-pill{font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600;background:rgba(54,244,164,0.12);color:#36F4A4;border:1px solid rgba(54,244,164,0.25)}
+.flow-header .status-pill.running{background:rgba(255,107,53,0.15);color:#FF6B35;border-color:rgba(255,107,53,0.3);animation:pulse-border 2s ease-in-out infinite}
+.flow-header .status-pill.stopped{background:rgba(255,68,68,0.15);color:#FF4444;border-color:rgba(255,68,68,0.3)}
+.flow-track{overflow:auto;padding:16px;display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-content:start}
+.flow-track-nodes{display:flex;flex-wrap:wrap;gap:6px;padding:2px 16px 10px;border-bottom:1px dashed rgba(255,255,255,0.06);background:rgba(10,14,26,0.4)}
+.flow-nodes{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:4px 0 4px}
+.flow-node{font:600 11px var(--mono);color:rgba(255,255,255,0.55);background:#131b31;border:1px solid rgba(255,255,255,0.09);
+  padding:4px 10px;border-radius:20px;white-space:nowrap;letter-spacing:.3px;transition:all .3s}
+.flow-node.active{color:#FF6B35;border-color:rgba(255,107,53,0.5);background:rgba(255,107,53,0.12);
+  box-shadow:0 0 14px rgba(255,107,53,0.35);animation:pulse-card 2s ease-in-out infinite}
+.flow-node.done{color:#36F4A4;border-color:rgba(54,244,164,0.35);background:rgba(54,244,164,0.08)}
+.flow-node.err{color:#FF4444;border-color:rgba(255,68,68,0.45);background:rgba(255,68,68,0.1)}
+.flow-node.idle{opacity:.55}
+.flow-link{display:inline-block;width:22px;height:2px;background:linear-gradient(90deg,rgba(54,244,164,0.12),rgba(54,244,164,0.5));
+  border-radius:2px;position:relative;overflow:hidden}
+.flow-link::after{content:'';position:absolute;left:-12px;top:0;width:12px;height:100%;background:rgba(54,244,164,0.9);
+  animation:flow-run 1.2s linear infinite}
+@keyframes flow-run{0%{left:-12px}100%{left:100%}}
+.flow-t-more{color:rgba(54,244,164,0.6);font-size:11px}
+.flow-task .tname.pend{color:rgba(140,170,220,0.65)}
+.flow-task .ticon.pend{background:rgba(140,170,220,0.12);color:#8caadd}
+.flow-task .ticon{transition:all .2s}
+.flow-summary .sum-val.ok{color:#36F4A4}
+.flow-summary .sum-val.run{color:#FF6B35}
+.flow-account-card .acc-phone{letter-spacing:.5px}
+
+/* ---------- 双管线分区卡片（API / UI） ---------- */
+.pipe{margin:14px 16px;border-radius:var(--radius);overflow:hidden;background:rgba(13,20,36,0.55);
+  border:1px solid rgba(255,255,255,0.06);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  box-shadow:var(--shadow),0 0 20px rgba(0,0,0,0.2)}
+.pipe.api{border-color:rgba(54,244,164,0.16)}
+.pipe.api .pipe-head{color:#36F4A4;background:linear-gradient(90deg,rgba(54,244,164,0.10),rgba(54,244,164,0.02));
+  border-bottom:1px solid rgba(54,244,164,0.14)}
+.pipe.ui{border-color:rgba(255,107,53,0.16)}
+.pipe.ui .pipe-head{color:#FF6B35;background:linear-gradient(90deg,rgba(255,107,53,0.10),rgba(255,107,53,0.02));
+  border-bottom:1px solid rgba(255,107,53,0.14)}
+.pipe-head{display:flex;align-items:center;gap:8px;padding:10px 14px;font-size:13px;font-weight:650;letter-spacing:.2px}
+.pipe-head .pipe-ic{font-size:14px;line-height:1}
+.pipe-head .pipe-tag{margin-left:auto;font-size:10.5px;font-weight:600;padding:2px 9px;border-radius:20px;letter-spacing:.5px;opacity:.85}
+.pipe.api .pipe-tag{background:rgba(54,244,164,0.12);border:1px solid rgba(54,244,164,0.3)}
+.pipe.ui .pipe-tag{background:rgba(255,107,53,0.12);border:1px solid rgba(255,107,53,0.3)}
+.pipe-body{padding:12px 14px}
+.pipe-log-label{display:flex;align-items:center;gap:6px;padding:2px 2px 6px;font-size:11px;color:var(--faint);letter-spacing:1px}
+.pipe-log-label::after{content:'';flex:1;height:1px;background:rgba(255,255,255,0.05)}
+.log-box{margin:0;padding:10px 12px;border-radius:8px;background:#080d1a;border:1px solid rgba(255,255,255,0.05);
+  max-height:168px;overflow:auto;font:11.5px/1.65 var(--mono);white-space:pre-wrap;color:#9fb4d9;
+  box-shadow:inset 0 1px 6px rgba(0,0,0,0.35)}
+.log-box:empty::before{content:'暂无日志';color:rgba(255,255,255,0.25)}
+.pipe.api .log-box{border-color:rgba(54,244,164,0.10)}
+.pipe.ui .log-box{border-color:rgba(255,107,53,0.10)}
+
+/* ---------- 已登录发现 ---------- */
+.disctable td{font-size:12.5px}
+
+/* ---------- Toast ---------- */
+#toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);
+  background:#1c2333;color:#fff;padding:10px 18px;border-radius:9px;font-size:13px;
+  opacity:0;pointer-events:none;transition:.25s;max-width:82%;text-align:center;
+  box-shadow:var(--shadow-lg);z-index:99}
+#toast.show{opacity:.96}
+.loading{color:var(--muted);font-size:13px;padding:16px}
+.view{display:none}
+.view.active{display:block}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">B</div>
+      <div>
+        <h1>Buddy 工作台</h1>
+        <div class="sub">签到 · 成长任务 · 积分</div>
+      </div>
+    </div>
+    <nav class="nav">
+      <button class="active" data-view="dashboard" onclick="showView('dashboard',this)">
+        <span class="ic">▦</span><span class="txt">工作台</span></button>
+      <!-- <button data-view="accounts" onclick="showView('accounts',this)">
+        <span class="ic">👥</span><span class="txt">账号管理</span></button> -->
+      <button data-view="console" onclick="showView('console',this)">
+        <span class="ic">▶</span><span class="txt">执行控制台</span></button>
+      <!-- <button data-view="discovered" onclick="showView('discovered',this)">
+        <span class="ic">＋</span><span class="txt">发现新账号</span></button> -->
+    </nav>
+    <div class="foot">buddy-auto-v2 · 本机运行<br>只监听 127.0.0.1</div>
+  </aside>
+
+  <main class="main">
+    <!-- ========== 工作台 ========== -->
+    <section class="view active" id="view-dashboard">
+      <div class="topbar">
+        <div>
+          <h2>工作台</h2>
+          <div class="sub" id="sub">加载中…</div>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="stat accent"><b id="s-accounts">-</b><span>已添加账号</span></div>
+        <div class="stat ok"><b id="s-signed">-</b><span>今日已签</span></div>
+        <div class="stat"><b id="s-credits">-</b><span>累计签到积分</span></div>
+        <div class="stat warn"><b id="s-pending">-</b><span>总待领积分</span></div>
+        <div class="stat"><b id="s-remain">-</b><span>总可用积分</span></div>
+      </div>
+      <div class="toolbar">
+        <span class="modegrp">
+          <span class="mode-label">执行模式</span>
+          <button id="modeManual" class="primary" onclick="setMode(false)">手动</button>
+          <button id="modeAuto" onclick="setMode(true)">自动</button>
+        </span>
+        <button class="primary" onclick="runAll()" id="btn-runall">⚡ 一键全自动</button>
+        <button class="danger" onclick="stopAll()" id="btn-stop" title="立即停止正在跑的任务">■ 停止任务</button>
+        <button onclick="act('capture-all',{})">续期全部凭证</button>
+        <button onclick="act('open-client',{})">打开客户端登录</button>
+        <!-- <button onclick="act('sync',{})">扫描新账号</button> -->
+        <button class="ghost" onclick="load()">刷新</button>
+      </div>
+      <div class="sub" id="modehint" style="margin:-8px 0 12px"></div>
+
+      <div class="card">
+        <h3>客户端当前登录 <small>UI 驱动的成长任务会在这个账号下执行</small></h3>
+        <div class="body"><div class="clientbar" id="clientbar"><span class="loading">检测中…</span></div></div>
+      </div>
+
+      <div id="warnings"></div>
+
+      <div class="card">
+        <h3>账号总览 <small>点卡片展开任务面板；「切换登录」改变客户端当前账号</small></h3>
+        <div class="body">
+          <div class="accgrid" id="accounts"><div class="loading">加载中…</div></div>
+          <div id="taskpanel-slot"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== 账号管理 ========== -->
+    <section class="view" id="view-accounts">
+      <div class="topbar"><div><h2>账号管理</h2>
+        <div class="sub">config.json 账号列表：执行 / 续期 / 启停 / 移除</div></div></div>
+      <div class="card">
+        <h3>账号列表 <small id="acc-count"></small></h3>
+        <div class="body"><div class="accgrid" id="accounts2"><div class="loading">加载中…</div></div>
+          <div id="taskpanel-slot2"></div></div>
+      </div>
+    </section>
+
+    <!-- ========== 执行控制台 ========== -->
+    <section class="view" id="view-console">
+      <div class="topbar"><div><h2>执行控制台</h2>
+        <div class="sub">一键全自动 / 单账号 / 单任务 的实时执行日志</div></div></div>
+      <div class="card" style="padding:0;overflow:hidden">
+        <div class="console-tabs">
+          <button class="active" data-job="runall" onclick="showJob('runall',this)">一键全自动</button>
+          <button data-job="acct" onclick="showJob('acct',this)">本账号执行</button>
+          <button data-job="uicode" onclick="showJob('uicode',this)">单任务执行</button>
+        </div>
+<div class="console-pipeline" id="consolelog">
+          <div class="flow-header">
+            <h3 id="flow-title">任务流水线</h3>
+            <span class="status-pill" id="flow-status">等待启动</span>
+          </div>
+          
+          <!-- API 任务流水线 -->
+          <div class="pipe api">
+            <div class="pipe-head">
+              <span class="pipe-ic">📡</span> API 任务流水线
+              <span class="pipe-tag">签到 · 领积分 · 猫猫派送</span>
+            </div>
+            <div class="pipe-body">
+              <div class="flow-track" id="api-flow-track" style="min-height:60px;padding:8px 2px 6px;grid-template-columns:1fr">
+                <div style="text-align:center;color:rgba(255,255,255,0.3);padding:20px 0;font-size:12px">暂无 API 任务数据</div>
+              </div>
+              <div class="flow-summary" id="api-flow-summary"></div>
+              <div class="pipe-log-label">API 日志</div>
+              <div class="log-box" id="api-log"></div>
+            </div>
+          </div>
+          
+          <!-- UI 任务流水线 -->
+          <div class="pipe ui">
+            <div class="pipe-head">
+              <span class="pipe-ic">🖱️</span> UI 任务流水线
+              <span class="pipe-tag">CDP 驱动 · 成长任务</span>
+            </div>
+            <div class="pipe-body">
+              <div class="flow-track" id="ui-flow-track" style="min-height:60px;padding:8px 2px 6px;grid-template-columns:1fr">
+                <div style="text-align:center;color:rgba(255,255,255,0.3);padding:20px 0;font-size:12px">暂无 UI 任务数据</div>
+              </div>
+              <div class="flow-summary" id="ui-flow-summary"></div>
+              <div class="pipe-log-label">UI 日志</div>
+              <div class="log-box" id="ui-log"></div>
+            </div>
+          </div>
+          
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== 发现新账号 ========== -->
+    <section class="view" id="view-discovered">
+      <div class="topbar"><div><h2>发现新账号</h2>
+        <div class="sub">从本机登录态实时读取；点「添加」写入账号列表</div></div></div>
+      <div class="card">
+        <h3>已登录账号 <small>含历史备份登录态</small></h3>
+        <div id="discovered"><div class="loading">加载中…</div></div>
+      </div>
+    </section>
+  </main>
+</div>
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let toastTimer;
+function toast(msg){
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 2800);
+}
+function esc(s){
+  return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+function shortUid(uid){ return uid ? uid.slice(0,8) + '…' : '—'; }
+
+let VIEW_KEY = '';
+let CLIENT_KEY = '';
+let MAIN_KEY = '';
+let AUTO_MODE = false;
+let STATE = null;
+let acctJobTimer = null, runAllTimer = null, uiCodeJobTimer = null;
+let CURRENT_JOB = 'runall';
+
+/* ---------- 视图切换 ---------- */
+function showView(name, btn){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  $('view-'+name).classList.add('active');
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+}
+function showJob(name, btn){
+  CURRENT_JOB = name;
+  document.querySelectorAll('.console-tabs button').forEach(b=>b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderConsole();
+  renderRawLog();
+}
+
+/* ---------- 渲染 ---------- */
+function credCell(c, b){
+  c = c || {}; b = b || {};
+  if (c.err) return `<span class="tag danger" title="${esc(c.err)}">查询失败</span>`;
+  let h = '';
+  if (c.total_credits != null)
+    h += `<div class="credits"><b>${c.total_credits}</b> <span class="uid">累计 · 连续 ${c.streak_days ?? '—'} 天 · ${c.signed ? '今日已签' : '今日未签'}</span></div>`;
+  if (b.err)
+    h += `<div class="credits"><span class="uid" title="${esc(b.err)}">剩余 —</span></div>`;
+  else if (b.remaining != null)
+    h += `<div class="credits"><b>${Number(b.remaining).toFixed(2)}</b> <span class="uid">剩余</span></div>`;
+  return h || '<span class="tag mute">无数据</span>';
+}
+
+function accCard(a, slot){
+  const names = (STATE && STATE.account_names) || {};
+  const s = a.task_summary || {};
+  const pct = s.total ? Math.round(100 * s.done / s.total) : 0;
+  const full = s.total && s.done === s.total;
+  const cred = !a.cred_ok
+    ? `<span class="tag danger" title="${esc(a.cred_error)}">无凭证</span>`
+    : (a.cred_expired ? '<span class="tag danger">已过期</span>'
+      : `<span class="tag ${a.cred_expiry_days<7?'warn':'ok'}">剩 ${a.cred_expiry_days} 天</span>`);
+  const initial = (a.label || a.key || '?').slice(0,1).toUpperCase();
+  const active = a.key === VIEW_KEY;
+  return `<div class="acc ${active?'active':''} ${a.is_current_client?' current-client':''}" onclick="toggleView('${a.key}',event,'${slot}')">
+    <div class="head">
+      <div class="avatar">${esc(initial)}</div>
+      <div>
+        <div class="name">${esc(a.label || a.key)}</div>
+        <div class="nick">${esc(a.nickname || '')} · ${esc(names[a.key] || a.key)}</div>
+      </div>
+      <div class="badges">
+        ${a.is_current_client ? '<span class="tag current-client-tag">当前账号登录客户端</span>' : ''}
+        ${a.enabled ? '' : '<span class="tag mute">已停用</span>'}
+        ${full ? '<span class="tag ok">已完成</span>' : ''}
+      </div>
+    </div>
+    <div class="row"><span class="lbl">积分</span><div>${credCell(a.credits, a.balance)}</div></div>
+    <div class="row"><span class="lbl">成长任务</span>
+      <div class="pbar"><i class="${full?'full':''}" style="width:${pct}%"></i></div>
+      <span class="uid">${s.done||0}/${s.total||0}${s.pending_credit?` · <span class="pending">可领${s.pending_credit}</span>`:''}</span>
+    </div>
+    <div class="row"><span class="lbl">凭证</span><div>${cred}</div>
+      <span class="uid" style="margin-left:auto">${esc((a.times||[]).join('、')||'—')}</span></div>
+    <div class="ops" onclick="event.stopPropagation()">
+      <button class="${a.is_current_client?'':'primary'}" ${a.is_current_client?'disabled':''} onclick="clientSwitch('${a.key}',event)">${a.is_current_client?'已登录':'切换登录'}</button>
+      <button class="primary" onclick="runAccount('${a.key}')">执行本账号</button>
+      <button onclick="act('capture',{key:'${a.key}'})">续期</button>
+      <button onclick="act('toggle',{key:'${a.key}',enabled:${!a.enabled}})">${a.enabled?'停用':'启用'}</button>
+      <button class="danger ghost" onclick="del('${a.key}')">移除</button>
+    </div>
+  </div>`;
+}
+
+function taskRows(list, key, uiCodes){
+  if (!list || !list.length) return '<div class="empty">没有读到成长任务</div>';
+  const done = list.filter(t=>t.done), undone = list.filter(t=>!t.done);
+  const isUi = code => (uiCodes||[]).includes(code);
+  const skipCodes = (STATE && STATE.skip_codes) || [];
+  const isSkip = code => skipCodes.includes(code);
+  const row = t => `<tr>
+      <td><div style="font-weight:600">${esc(t.title)}${t.paid ? ' <span class="tag danger">需付费</span>' : ''}</div>${t.desc ? `<div class="uid">${esc(t.desc)}</div>` : ''}</td>
+      <td><span class="tag ${t.paid?'danger':(t.done?'ok':(t.claimable?'warn':'mute'))}">${esc(t.status_label)}</span></td>
+      <td class="uid">${esc(t.progress_text)}</td>
+      <td>${(t.paid || isSkip(t.code)) ? '—' : (t.reward_credit ? '+'+t.reward_credit : '—')}</td>
+      <td><div class="ops" style="display:flex;gap:5px;flex-wrap:wrap">
+        ${t.paid ? `<button disabled>已跳过（需付费）</button>` : ''}
+        ${(!t.paid && isSkip(t.code)) ? `<button disabled>已跳过（按要求不执行）</button>` : ''}
+        ${(!t.paid && !isSkip(t.code) && t.accept_needed) ? `<button onclick="taskAct('${key}','${t.code}','accept',event)">接取</button>` : ''}
+        ${(!t.paid && !isSkip(t.code) && t.claimable) ? `<button class="primary" onclick="taskAct('${key}','${t.code}','claim',event)">领取</button>` : ''}
+        ${(!t.paid && t.done) ? '<button disabled>已领取</button>' : ''}
+        ${(!t.paid && !isSkip(t.code) && !t.done && !t.claimable && !t.accept_needed && isUi(t.code)) ? `<button onclick="runUiCode('${key}','${t.code}',event)">执行</button>` : ''}
+        ${(!t.paid && !isSkip(t.code) && !t.done && !t.claimable && !t.accept_needed && !isUi(t.code)) ? '<button disabled>待完成</button>' : ''}
+      </div></td>
+    </tr>`;
+  const avail = undone.filter(t=>!t.locked&&!t.expired&&!t.paid&&!isSkip(t.code));
+  const paidCnt = undone.filter(t=>t.paid).length;
+  return `<div class="grp">未完成 ${undone.length} 个（可得 ${avail.reduce((s,t)=>s+t.reward_credit,0)} 积分）${paidCnt ? '　其中 '+paidCnt+' 个需付费已跳过' : ''}</div>
+    <table><thead><tr><th>任务</th><th>状态</th><th>进度</th><th>可得积分</th><th>操作</th></tr></thead>
+    <tbody>${undone.map(row).join('') || '<tr><td colspan="5" class="uid">全部完成</td></tr>'}</tbody></table>
+    <div class="grp">已完成 ${done.length} 个</div>
+    <table><thead><tr><th>任务</th><th>状态</th><th>进度</th><th>可得积分</th><th>操作</th></tr></thead>
+    <tbody>${done.map(row).join('')}</tbody></table>`;
+}
+
+function taskPanel(a, uiCodes){
+  const s = a.task_summary || {};
+  return `<div class="taskpanel">
+    <div class="thead">
+      <b>${esc(a.label || a.key)} 的成长任务</b>
+      <span class="uid">已完成 ${s.done||0}/${s.total||0}</span>
+      ${a.profile && a.profile.level ? `<span class="uid">等级 ${a.profile.level}</span>` : ''}
+      ${s.pending_credit ? `<span class="pending">待领 ${s.pending_credit} 积分</span>` : ''}
+      <span class="sp"></span>
+      <button class="primary" onclick="runAccount('${a.key}')">执行本账号</button>
+      <button class="ghost" onclick="toggleView('${a.key}',null)">收起</button>
+    </div>
+    ${a.task_error ? `<div class="note">${esc(a.task_error)}</div>` : ''}
+    ${taskRows(a.tasks||[], a.key, uiCodes)}
+  </div>`;
+}
+
+function renderAccounts(slot){
+  const box = $(slot === 'slot2' ? 'accounts2' : 'accounts');
+  const list = (STATE && STATE.accounts) || [];
+  if (!list.length){
+    box.innerHTML = `<div class="empty">账号列表为空，请到「发现新账号」添加。</div>`;
+    const panelSlot = $(slot === 'slot2' ? 'taskpanel-slot2' : 'taskpanel-slot');
+    if (panelSlot) panelSlot.innerHTML = '';
+    return;
+  }
+  box.innerHTML = list.map(a => accCard(a, slot)).join('');
+  const panelSlot = $(slot === 'slot2' ? 'taskpanel-slot2' : 'taskpanel-slot');
+  const active = list.find(a => a.key === VIEW_KEY);
+  panelSlot.innerHTML = active ? taskPanel(active, STATE.ui_codes) : '';
+  const cnt = $('acc-count');
+  if (cnt) cnt.textContent = `共 ${list.length} 个`;
+}
+
+function renderClientBar(cc, holder){
+  const box = $('clientbar');
+  if (!box) return;
+  // 占用提示（串行铁则）：有任务正在操作客户端时明确告知，
+  // 用户点击被拒时能立刻明白「谁在占用」，而不是以为系统坏了。
+  const occ = holder
+    ? `<small class="meta" style="color:#e8a33d">正在执行：${esc(holder)}（此时切号会导致任务做到别的账号）</small>`
+    : '';
+  if (!cc || !cc.reachable){
+    box.className = 'clientbar off';
+    box.innerHTML = `<span class="dot"></span><span class="who">未检测到客户端登录状态</span>` +
+      `<small class="meta">客户端未打开或未带调试端口（需带 CDP 端口启动）</small>` + occ +
+      `<span class="sp"></span>` +
+      (MAIN_KEY ? `<button onclick="restoreMain()">回主号</button>` : '');
+    return;
+  }
+  box.className = 'clientbar';
+  const who = cc.menu ? esc(cc.menu) : '(未知昵称)';
+  const same = cc.key ? ` · <span class="uid">${esc(cc.key)}</span>` : '';
+  box.innerHTML = `<span class="dot"></span><span class="who">${who}${same}</span>` +
+    `<small class="meta">这就是当前真正登录客户端的账号</small>` + occ +
+    `<span class="sp"></span>` +
+    (MAIN_KEY ? `<button onclick="restoreMain()">回主号</button>` : '');
+}
+
+function renderDiscovered(list){
+  const box = $('discovered');
+  if (!list || !list.length){
+    box.innerHTML = `<div class="empty">本机没有读到任何登录态。<br>
+      请先打开 WorkBuddy 客户端登录账号（「打开客户端登录」），登录后点「刷新」。</div>`;
+    return;
+  }
+  let html = `<table class="disctable"><thead><tr>
+      <th>账号</th><th>标识 UID</th><th>积分 / 连续</th><th>登录态</th><th>操作</th>
+    </tr></thead><tbody>`;
+  for (const d of list){
+    const added = d.in_config;
+    const op = added
+      ? `<button disabled>已添加 · ${esc(d.config_key)}</button>`
+      : `<button class="primary" onclick="act('add',{uid:'${d.uid}'})">添加</button>`;
+    const exp = d.expired
+      ? '<span class="tag danger">已过期</span>'
+      : (d.expiry_days == null ? '<span class="tag mute">未知</span>'
+        : `<span class="tag ${d.expiry_days<7?'warn':'ok'}">剩 ${d.expiry_days} 天</span>`);
+    html += `<tr>
+      <td><div style="font-weight:600">${esc(d.nickname || '(无昵称)')}</div>
+          <div class="uid">${esc(d.phone || '')} · 保存于 ${esc(d.saved_at)}</div></td>
+      <td class="uid">${shortUid(d.uid)}</td>
+      <td>${credCell(d.credits)}</td>
+      <td>${exp}</td>
+      <td><div class="ops">${op}</div></td>
+    </tr>`;
+  }
+  box.innerHTML = html + '</tbody></table>';
+}
+
+function jobData(){
+  if (!STATE) return null;
+  if (CURRENT_JOB === 'runall') return {j: STATE.run_all || {}, kind:'runall'};
+  if (CURRENT_JOB === 'acct') return {j: STATE.acct_job || {}, kind:'acct'};
+  //修复：后端 build_state 产出的键是 uicode_job，原先前端读 ui_code_job
+  //恒为 undefined，导致单任务执行的日志与状态在界面完全无法显示。
+  //兼容两种命名，避免后端字段调整时静默失效。
+  return {j: (STATE.uicode_job || STATE.ui_code_job) || {}, kind:'uicode'};
+}
+function parseAccountPipe(tail, type){
+  // type: 'api' 或 'ui' 或 ''（全部）
+  const names = (STATE && STATE.account_names) || {};
+  const lines = tail.split('\n');
+  const accs = [];
+  let cur = null;
+  const ensure = (key, phone) => {
+    const existing = accs.find(a => a.key === key);
+    if (existing) {
+      if (cur && cur !== existing) {
+        cur.active = false;
+        cur.done = !cur.err;
+      }
+      cur = existing;
+      cur.active = true;
+      return cur;
+    }
+    if (cur) {
+      cur.active = false;
+      cur.done = !cur.err;
+    }
+    cur = {key: key, phone: phone || '', active: true, done: false, err: false, phase: '', tasks: []};
+    accs.push(cur);
+    return cur;
+  };
+  const applyTask = (code, prog, rawSt) => {
+    if (!cur) return; // 还没确定账号，跳过这行
+    let st2 = 'pend';
+    if (rawSt === 'claimed') st2 = 'done';
+    else if (rawSt === 'in_progress') st2 = 'run';
+    else if (rawSt === 'not_accepted') st2 = 'skip';
+    else if (rawSt === 'failed') st2 = 'err';
+    const t = cur.tasks.find(x => x.code === code);
+    if (t){ t.prog = prog; t.st = st2; }
+    else cur.tasks.push({code: code, prog: prog, st: st2});
+  };
+  // 从启动日志解析账号列表
+  // 修复：原正则 /启用账号\s+\d+\s+个[:：]\s*([a-z0-9_,\s]+)/ 中
+  // 字符类含 \s 且要求整段连续，遇到 "个：" 后直接跟 account_1, account_2
+  // 尚可，但一旦账号名后混入中文标点即截断失败。现改为全局提取 account_ 标识。
+  let keys = [];
+  const keyRe = /account_[a-z0-9_]+/g;
+  let km;
+  const head = tail.slice(0, tail.indexOf('=====') >= 0 ? tail.indexOf('=====') : 400);
+  while ((km = keyRe.exec(head)) !== null){ keys.push(km[0]); }
+  keys = [...new Set(keys)];
+  keys.forEach(k => ensure(k, ""));
+  // 如果没有启动日志，从日志里预找第一个账号
+  if (accs.length === 0){
+    let m1 = tail.match(/\[(?:ui|api|claim):(account_[a-z0-9_]+)/);
+    if (m1) ensure(m1[1], "");
+  }
+  for (const line of lines){
+    // 行首受控 area 标记（与 logproto 契约一致）：
+    //   [HH:MM:SS][api:account_1] xxx  → 切换当前账号
+    //   [HH:MM:SS][ui:account_1] xxx   → 切换当前账号
+    //   [HH:MM:SS][api] xxx           → API 阶段但不带账号，不切换
+    let mTag = line.match(/^\[\d{2}:\d{2}:\d{2}\]\[([a-z]+)(?::(account_[a-z0-9_]+))?\]/);
+    if (mTag){
+      const area = mTag[1];
+      const key = mTag[2];
+      const want = (type === 'api') ? 'api' : (type === 'ui') ? 'ui' : null;
+      // claim/report 等归属与 api 侧的阶段，同样纳入账号轨道
+      const isApiSide = (area === 'api' || area === 'claim');
+      const isUiSide  = (area === 'ui');
+      const matchSide = want === null ? (isApiSide || isUiSide)
+                        : (want === 'api' ? isApiSide : isUiSide);
+      if (key && matchSide){
+        ensure(key, '');
+        const stm = line.match(/接取\s+(\d+)\s+个\s*\/\s*领取\s+(\d+)\s+个/);
+        if (stm && cur) cur.phase = '接取 ' + stm[1] + ' / 领取 ' + stm[2];
+      }
+      continue;
+    }
+    // 匹配 [切号·account_x·手机号] -> account_x ok=True
+    let mSwitch = line.match(/切号[·\-](account_[a-z0-9_]+)/);
+    if (mSwitch){
+      ensure(mSwitch[1], '');
+      continue;
+    }
+    let m = line.match(/\[切\]\s*->\s*([a-z0-9_]+)\s+ok=(True|False)(?:\s+界面=(\d+))?/i);
+    if (m){
+      cur = ensure(m[1], m[3] || '');
+      cur.active = m[2] !== 'False';
+      cur.err = m[2] === 'False';
+      continue;
+    }
+    m = line.match(/切号\s+ok=(True|False)\s*\|\s*完成/);
+    if (m){
+      if (cur){ cur.active = false; cur.done = m[1] !== 'False'; }
+      continue;
+    }
+    m = line.match(/-\s+(.+?)(?:\s*[:：]\s*|\s+)([\d/]+|None\/None|[\w.]+)\s*\[(\w+)\]/);
+    if (m){ applyTask(m[1].trim(), m[2], m[3]); continue; }
+    m = line.match(/\[跳过\]\s+(.+?)\s+已达标\s+([\d/]+)/);
+    if (m){ applyTask(m[1].trim(), m[2], 'claimed'); continue; }
+    m = line.match(/\[阶段\]\s*(.*)/);
+    if (m){ if (cur) cur.phase = m[1].trim(); continue; }
+    // 通用任务卡片行（API 阶段简化格式：  - 任务名 [状态]）
+    m = line.match(/^\s+-\s+(.+?)\s+\[(\w+)\]\s*$/);
+    if (m){ applyTask(m[1].trim(), '', m[2]); continue; }
+    m = line.match(/(团队\[[^\]]+\]\s*进度[^\n]*|\[交付等待\][^\n]*|\[等待\][^\n]*)/);
+    if (m){ if (cur) cur.lastEvent = m[1].trim(); continue; }
+    // 修复：原此处还有一条 /\[(?:ui|api):([a-z0-9_]+)/ 兜底分支，
+    // 它不锚定行首，会把正文里出现的 "[ui:xxx]" 也当账号，且已被上方
+    // mTag 分支完整覆盖，故移除以避免重复切换当前账号导致轨道错乱。
+  }
+  if (cur) cur.done = !cur.active && !cur.err;
+  return accs;
+}
+
+function renderRawLog(){
+  const d = jobData();
+  const apiEl = document.getElementById("api-log");
+  const uiEl = document.getElementById("ui-log");
+  if (!apiEl || !uiEl) return;
+  
+  if (!d || !d.j || !d.j.tail){ 
+    apiEl.textContent = "暂无 API 日志"; 
+    uiEl.textContent = "暂无 UI 日志"; 
+    return; 
+  }
+  
+  // 获取账号名映射（account_x → 手机号）
+  const names = (STATE && STATE.account_names) || {};
+  
+  // 把日志里的 account_x 替换成手机号
+  let tail = d.j.tail;
+  for (const key in names){
+    tail = tail.split(key).join(names[key]);
+  }
+  
+  // 按阶段分离日志：API阶段日志只显示API区域，UI阶段日志只显示UI区域
+  // 2026-09-26: 以行级 [api: / [ui: 前缀为硬分隔（后端 p(stage,...) 的 stage 即来源），
+  // 阶段标记做兜底，杜绝含"成长任务/切号"等串区词的行误入对方区域。
+  const lines = tail.split("\n");
+  const apiLines = [];
+  const uiLines = [];
+  let currentPhase = "none";
+
+  // 与 core/logproto.py 保持一致的受控 area 集合（唯一契约）
+  const API_AREAS = ['start','client','api','claim','order'];
+  const UI_AREAS  = ['ui','done','report'];
+
+  lines.forEach(line => {
+    // 行级来源前缀（严格对应 logproto.format_line 的三段式）
+    //   [HH:MM:SS][api] xxx
+    //   [HH:MM:SS][ui:account_1] xxx
+    const head = line.match(/^\[\d{2}:\d{2}:\d{2}\]\[([a-z]+)(?::([^\]]+))?\]/);
+    const area = head ? head[1] : null; // 'api' | 'ui' | 'start' | ... | null
+
+    if (area && API_AREAS.includes(area)){
+      currentPhase = "api";
+      apiLines.push(line);
+    } else if (area && UI_AREAS.includes(area)){
+      currentPhase = "ui";
+      uiLines.push(line);
+    } else if (line.includes("阶段三") || line.includes("收尾领取") || line.includes("汇总报告") || line.includes("claim")){
+      // 阶段三收尾领取属 API 类
+      currentPhase = "api";
+      apiLines.push(line);
+    } else if (line.includes("阶段一") || line.includes("API 管线") || line.includes("===== 阶段一")){
+      currentPhase = "api";
+      apiLines.push(line);
+    } else if (line.includes("阶段二") || line.includes("UI 管线") || line.includes("===== 阶段二")){
+      currentPhase = "ui";
+      uiLines.push(line);
+    } else {
+      // 通用日志（启动/结束等），按当前阶段分配
+      if (currentPhase === "api") apiLines.push(line);
+      else if (currentPhase === "ui") uiLines.push(line);
+      else apiLines.push(line); // 默认放API区
+    }
+  });
+  
+  apiEl.textContent = apiLines.join("\n") || "暂无 API 日志";
+  uiEl.textContent = uiLines.join("\n") || "暂无 UI 日志";
+  
+  apiEl.scrollTop = apiEl.scrollHeight;
+  uiEl.scrollTop = uiEl.scrollHeight;
+}
+
+function renderConsole(){
+  const d = jobData();
+  const title = $('flow-title'), statusEl = $('flow-status');
+  if (!title) return;
+  
+  const apiTrack = $('api-flow-track');
+  const uiTrack = $('ui-flow-track');
+  const apiSummary = $('api-flow-summary');
+  const uiSummary = $('ui-flow-summary');
+  
+  if (!apiTrack || !uiTrack) return;
+  
+  if (!d || !d.j){
+    apiTrack.innerHTML = '<div style="text-align:center;color:rgba(255,255,255,0.3);padding:20px 0;font-size:12px">暂无 API 任务数据</div>';
+    uiTrack.innerHTML = '<div style="text-align:center;color:rgba(255,255,255,0.3);padding:20px 0;font-size:12px">暂无 UI 任务数据</div>';
+    if (apiSummary) apiSummary.innerHTML = '';
+    if (uiSummary) uiSummary.innerHTML = '';
+    if (title) title.textContent = '任务流水线';
+    if (statusEl){ statusEl.textContent = '等待启动'; statusEl.className = 'status-pill'; }
+    return;
+  }
+  
+  const j = d.j;
+  const running = j.running;
+  const stopping = STATE && STATE.stopping;
+  
+  let label = '';
+  if (d.kind === 'acct') label = (j.label || j.key || '') + ' · 本账号执行';
+  else if (d.kind === 'uicode') label = (j.label || j.key || '') + ' · ' + (j.title || j.code || '单任务');
+  else label = '一键全自动 · 全部账号';
+  
+  if (title) title.textContent = label;
+  if (statusEl){
+    if (running){ statusEl.textContent = stopping ? '停止中…' : '运行中…'; statusEl.className = 'status-pill running'; }
+else if (!j.tail || j.tail.trim() === ''){ statusEl.textContent = '待执行'; statusEl.className = 'status-pill idle'; }
+    else if (j.stopped){ statusEl.textContent = '已停止'; statusEl.className = 'status-pill stopped'; }
+    else { statusEl.textContent = '已完成'; statusEl.className = 'status-pill'; }
+  }
+  
+  const names = (STATE && STATE.account_names) || {};
+  const tail = j.tail || '';
+  
+  // 判断当前执行阶段
+  // 修复：原判断依赖 /\[ui:/ 这类字符串匹配，而「已完成账号跳过UI」「客户端未就绪
+  // 跳过UI」等分支根本不产生 [ui: 前缀行，会把已跑完 UI 阶段误判成仍在API 阶段。
+  // 现改为扫描行首受控 area 标记，与 logproto 契约一致。
+  const hasApiPhase = /^\[\d{2}:\d{2}:\d{2}\]\[(?:api|claim)\b/m.test(tail);
+  const hasUiPhase  = /^\[\d{2}:\d{2}:\d{2}\]\[ui[:\]]/m.test(tail)
+                  || tail.includes('阶段二') || tail.includes('UI 管线');
+  const isApiRunning = running && !hasUiPhase; // 正在运行且还没进入UI阶段
+  const isUiRunning = running && hasUiPhase;
+  
+  // 分别解析 API 和 UI 任务
+  const apiAccs = parseAccountPipe(tail, 'api');
+  const uiAccs = parseAccountPipe(tail, 'ui');
+  
+  // 渲染 API 任务流水线（始终显示）
+  renderFlowTrack(apiTrack, apiSummary, apiAccs, names, 'api', d.kind);
+  
+  // 渲染 UI 任务流水线（API阶段运行时显示占位，UI阶段才显示真实内容）
+  if (isApiRunning) {
+    // API 阶段：UI 流水线显示占位提示
+    uiTrack.innerHTML = '<div style="text-align:center;color:rgba(255,255,255,0.35);padding:20px 0;font-size:12px">⏳ API 阶段进行中，UI 流水线将在 API 完成后启动</div>';
+    if (uiSummary) uiSummary.innerHTML = '<span class="sum-item" style="color:var(--faint)">等待 API 阶段完成…</span>';
+  } else {
+    // UI 阶段或已完成：正常渲染
+    renderFlowTrack(uiTrack, uiSummary, uiAccs, names, 'ui', d.kind);
+  }
+}
+
+// 渲染单条流水线（API 或 UI）——传送带模式：只显示当前活动账号的详细卡片
+function renderFlowTrack(track, summary, accs, names, type, kind){
+  if (!accs.length){
+    let emptyText = type === 'api' ? '暂无 API 任务数据' : '暂无 UI 任务数据';
+    track.innerHTML = '<div style="text-align:center;color:rgba(255,255,255,0.3);padding:20px 0;font-size:12px">' + emptyText + '</div>';
+    if (summary) summary.innerHTML = '';
+    return;
+  }
+  
+  track.innerHTML = '';
+  
+  // 节点条：显示全部账号作为进度指示器（传送带导航）
+  let nodesBar = document.createElement('div');
+  nodesBar.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;padding:0 0 8px 0;grid-column: 1 / -1;'
+  
+  accs.forEach((a, i) => {
+    const node = document.createElement('span');
+    const nodeClass = a.done ? 'done' : a.active ? 'active' : a.err ? 'err' : 'idle';
+    node.className = 'flow-node ' + nodeClass;
+    node.textContent = names[a.key] || a.key.replace(/^account_/, '');
+    node.title = (a.phone ? a.key + ' · ' + a.phone : a.key);
+    nodesBar.appendChild(node);
+  });
+  
+  track.appendChild(nodesBar);
+  
+  // 汇总信息
+  const doneAcc = accs.filter(x => x.done).length;
+  const activeAcc = accs.filter(x => x.active).length;
+  const totalTasks = accs.reduce((s, a) => s + a.tasks.length, 0);
+  const doneTasks = accs.reduce((s, a) => s + a.tasks.filter(t => t.st === 'done').length, 0);
+  const runTasks = accs.reduce((s, a) => s + a.tasks.filter(t => t.st === 'run').length, 0);
+  
+  if (summary){
+    summary.innerHTML =
+      '<span class="sum-item">账号 <span class="sum-val">' + accs.length + '</span></span>' +
+      '<span class="sum-item">完成 <span class="sum-val ok">' + doneAcc + '</span></span>' +
+      '<span class="sum-item">进行中 <span class="sum-val run">' + activeAcc + '</span></span>' +
+      '<span class="sum-item">任务 <span class="sum-val">' + doneTasks + '/' + totalTasks + '</span></span>' +
+      (runTasks ? '<span class="sum-item">运行 <span class="sum-val run">' + runTasks + '</span></span>' : '');
+  }
+  
+  // 找到当前要显示的账号：优先 active，否则最后一个有任务的，否则最后一个
+  let activeIdx = accs.findIndex(a => a.active);
+  if (activeIdx === -1) {
+    for (let i = accs.length - 1; i >= 0; i--) {
+      if (accs[i].done || accs[i].tasks.length > 0 || accs[i].err) { activeIdx = i; break; }
+    }
+    if (activeIdx === -1) activeIdx = accs.length - 1;
+  }
+  
+  const a = accs[activeIdx];
+  
+  // 传送带位置提示
+  if (accs.length > 1) {
+    const beltHint = document.createElement('div');
+    beltHint.style.cssText = 'font-size:11px;color:rgba(255,255,255,0.4);padding:2px 0 8px;text-align:center;';
+    const pos = activeIdx + 1;
+    beltHint.textContent = '▶ 当前: ' + (names[a.key] || a.key) + ' (' + pos + '/' + accs.length + ')' +
+      (a.done ? ' ✓ 已完成' : a.active ? ' ● 执行中' : a.err ? ' ✗ 异常' : ' ○ 等待');
+    track.appendChild(beltHint);
+  }
+  
+  // 只渲染当前账号的详细卡片
+  const card = document.createElement('div');
+  const cardClass = a.done ? 'done' : a.active ? 'active' : a.err ? 'err' : 'idle';
+  card.className = 'flow-account-card ' + cardClass;
+  card.style.cssText = (card.style.cssText || '') + 'transition: all 0.3s ease;';
+  
+  const dotColor = type === 'api' ? 
+    (a.done ? '#36F4A4' : a.active ? '#36F4A4' : a.err ? '#FF4444' : 'rgba(54,244,164,0.3)') :
+    (a.done ? '#FF6B35' : a.active ? '#FF6B35' : a.err ? '#FF4444' : 'rgba(255,107,53,0.3)');
+  
+  const pulse = a.active ? 'animation:pulse-dot 1.5s infinite' : '';
+  
+  let taskHtml = '';
+  if (!a.tasks.length){
+    taskHtml = '<div style="color:rgba(255,255,255,0.35);font-size:11px;padding:2px 0">' + 
+      (a.done ? '该账号任务已完成' : '等待执行…') + '</div>';
+  } else {
+    const order = {run:0, err:1, pend:2, skip:3, done:4};
+    const sorted = a.tasks.slice().sort((x, y) => (order[x.st] == null ? 9 : order[x.st]) - (order[y.st] == null ? 9 : order[y.st]));
+    const iconMap = {done:'✓', run:'●', skip:'–', err:'✗', pend:'○'};
+    taskHtml = sorted.map(t =>
+      '<div class="flow-task"><span class="ticon ' + t.st + '">' + (iconMap[t.st] || '○') + '</span>' +
+      '<span class="tname ' + t.st + '">' + esc(t.title || t.code) + (t.prog ? ' · ' + esc(t.prog) : '') + '</span></div>'
+    ).join('');
+  }
+  
+  const phaseHtml = a.phase
+    ? '<div style="font-size:11px;color:rgba(255,255,255,0.45);margin:6px 0 2px;border-top:1px dashed rgba(255,255,255,0.08);padding-top:6px">' + esc(a.phase) + '</div>'
+    : '';
+  
+  const evtHtml = a.lastEvent
+    ? '<div style="font-size:11px;color:#FFD166;margin:6px 0 2px;border-top:1px dashed rgba(255,209,102,0.15);padding-top:6px">⚠ ' + esc(a.lastEvent) + '</div>'
+    : '';
+  
+  card.innerHTML =
+    '<div class="acc-name"><span style="width:8px;height:8px;border-radius:50%;background:' + dotColor + ';display:inline-block;' + pulse + '"></span>' + esc(names[a.key] || a.key) + '</div>' +
+    (a.phone ? '<div class="acc-phone">' + esc(a.phone) + '</div>' : '') +
+    phaseHtml +
+    evtHtml +
+    '<div class="flow-task-list">' + taskHtml + '</div>';
+  
+  track.appendChild(card);
+}
+
+function applyState(s, opts){
+  opts = opts || {};
+  STATE = s;
+  $('sub').textContent = '数据更新于 ' + s.generated_at +
+    (s.schedule && s.schedule.trigger_mode === 'interval'
+      ? ` · 每 ${s.schedule.every_minutes} 分钟循环` : ' · 每日定点执行');
+  $('s-accounts').textContent = s.totals.accounts;
+  $('s-signed').textContent = s.totals.signed_today;
+  $('s-credits').textContent = s.totals.total_credits;
+  $('s-pending').textContent = s.totals.potential_credits || 0;
+  const rem = s.totals.remaining_credits;
+  const remEl = $('s-remain');
+  remEl.textContent = (rem == null) ? '—' : Number(rem).toFixed(2);
+  const unk = s.totals.remaining_unknown || [];
+  remEl.title = unk.length ? '未能读取余额：' + unk.join('、') : '各账号剩余额度之和';
+  if (!opts.keepView) VIEW_KEY = '';
+  CLIENT_KEY = (s.client_current && s.client_current.key) || '';
+  MAIN_KEY = (s.accounts[0] && s.accounts[0].key) || '';
+  AUTO_MODE = !!s.auto_mode;
+  applyModeUI();
+  renderClientBar(s.client_current, s.holder_text || '');
+  $('warnings').innerHTML = (s.warnings||[]).map(w=>`<div class="note">${esc(w)}</div>`).join('');
+  renderDiscovered(s.discovered);
+  renderAccounts('slot1');
+  renderAccounts('slot2');
+  renderConsole();
+  renderRawLog();
+}
+
+async function load(opts){
+  opts = opts || {};
+  try{
+    const res = await fetch('/api/state');
+    const s = await res.json();
+    if (s.ok === false){ if (!opts.silent) toast('读取失败：' + s.error); return; }
+    applyState(s, opts);
+    
+    // 如果还在加载中，2 秒后自动再加载一次
+    if (s.loading){
+      setTimeout(() => load({silent: true}), 2000);
+    }
+  }catch(e){
+    if (!opts.silent) toast('无法连接本地服务：' + e);
+  }
+}
+
+async function toggleView(key, ev, slot){
+  if (ev) ev.stopPropagation();
+  VIEW_KEY = (VIEW_KEY !== key) ? key : '';
+  renderAccounts('slot1');
+  renderAccounts('slot2');
+}
+
+async function clientSwitch(key, ev){
+  if (ev) ev.stopPropagation();
+  toast('正在切换客户端登录到 ' + key + ' …');
+  try{
+    const res = await fetch('/api/client-switch', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({key})});
+    const r = await res.json();
+    if (r.ok){ toast(r.message || '已切换'); }
+    else{
+      toast('切换失败：' + (r.error || '未知错误'));
+      if (r.need_client && r.hint) toast(r.hint);
+    }
+    load();
+  }catch(e){ toast('切换请求失败：' + e); }
+}
+
+async function restoreMain(){
+  if (!MAIN_KEY){ toast('没有可用的主号'); return; }
+  await clientSwitch(MAIN_KEY);
+}
+
+async function stopAll(){
+  if (!confirm('确定要停止正在跑的任务吗？\n已经完成的签到/任务/领积分都会保留，未跑完的直接跳过。')) return;
+  const b = $('btn-stop');
+  if (b){ b.disabled = true; b.innerHTML = '停止中…'; }
+  try{
+    const res = await fetch('/api/stop', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+    const r = await res.json();
+    toast(r.ok ? (r.message || '已发出停止指令') : ('停止失败：' + (r.error || '未知错误')));
+  }catch(e){ toast('请求失败：' + e); }
+  finally{
+    setTimeout(() => { if (b){ b.disabled = false; b.innerHTML = '■ 停止任务'; } }, 1500);
+  }
+}
+
+async function runAll(){
+  if (runAllTimer || uiCodeJobTimer || acctJobTimer){ toast('已有任务进行中，请稍候'); return; }
+  try{
+    const res = await fetch('/api/run-all', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+    const r = await res.json();
+    if (r.ok){
+      toast(r.message || '已启动一键全自动');
+      showView('console', document.querySelector('[data-view="console"]'));
+      showJob('runall', document.querySelector('[data-job="runall"]'));
+      pollRunAll();
+    }else{
+      toast('启动失败：' + (r.error || '未知错误'));
+    }
+  }catch(e){ toast('请求失败：' + e); }
+}
+
+function pollRunAll(){
+  runAllTimer = setInterval(async () => {
+    try{
+      const res = await fetch('/api/state');
+      const s = await res.json();
+      applyState(s, {keepView:true});
+      const ra = s.run_all || {};
+      if (!ra.running){
+        clearInterval(runAllTimer);
+        runAllTimer = null;
+        if (s.stopping)
+          toast('已停止：部分账号成长任务可能未完成，详见日志');
+        else
+          toast('全自动执行完成（完成度见日志汇总）');
+        load({keepView:true});
+      }
+    }catch(e){}
+  }, 3000);
+}
+
+async function taskAct(key, code, action, ev){
+  if (ev) ev.stopPropagation();
+  toast('执行中…');
+  try{
+    const res = await fetch('/api/task', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({key, code, action})});
+    const r = await res.json();
+    toast(r.ok ? (r.message || '完成') : ('失败：' + (r.error || '未知错误')));
+    load({keepView:true});
+  }catch(e){ toast('请求失败：' + e); }
+}
+
+async function act(name, payload){
+  const label = {add:'添加',run:'执行','capture-all':'续期','capture':'登录/续期',
+                 'open-client':'打开客户端',toggle:'切换状态'}[name] || name;
+  toast(label + '中…');
+  try{
+    const res = await fetch('/api/' + name, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const r = await res.json();
+    if (r.ok === false){
+      toast('失败：' + (r.error || '未知错误'));
+      if (r.need_login) toast(r.hint || '请先打开客户端登录该账号');
+    }else{
+      toast(r.message || '完成');
+    }
+    if (r.results){
+      const ok = r.results.filter(x=>x.status==='success').length;
+      if (r.results.length > 1) toast(`执行完成：${ok}/${r.results.length} 个账号成功`);
+    }
+    load({keepView:true});
+  }catch(e){
+    toast('请求失败：' + e);
+  }
+}
+
+function del(key){
+  if (!confirm(`确定把 ${key} 从账号列表移除？（凭证文件会保留）`)) return;
+  act('remove', {key});
+}
+
+async function setMode(auto){
+  try{
+    const res = await fetch('/api/set-mode', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({auto: !!auto})});
+    const r = await res.json();
+    AUTO_MODE = !!r.auto_mode;
+    toast(r.message || ('已切到' + (AUTO_MODE ? '自动' : '手动') + '模式'));
+    applyModeUI();
+    load({keepView:true});
+  }catch(e){ toast('切换模式失败：' + e); }
+}
+
+function applyModeUI(){
+  const m = $('modeManual'), a = $('modeAuto');
+  if (m) m.className = AUTO_MODE ? '' : 'primary';
+  if (a) a.className = AUTO_MODE ? 'primary' : '';
+  const ra = $('btn-runall');
+  if (ra){
+    ra.disabled = !AUTO_MODE;
+    ra.title = AUTO_MODE
+      ? '一键全自动：扫描全部账号（先签到/开盲盒/领派送，再按未完成最多优先做任务），已完成跳过。'
+      : '手动模式下已禁用：请用单账号的「执行本账号」逐个完成。';
+  }
+  const hint = $('modehint');
+  if (hint) hint.textContent = AUTO_MODE
+    ? '自动模式：点「一键全自动」扫描全部账号（先签到/盲盒/派送 → 再按未完成最多优先做任务，已完成跳过）。'
+    : '手动模式：「一键全自动」已禁用；点任意账号卡片的「执行本账号」即可单账号跑完全部。';
+}
+
+async function runAccount(key){
+  if (acctJobTimer || runAllTimer || uiCodeJobTimer){ toast('已有任务正在执行，请稍候'); return; }
+  try{
+    const res = await fetch('/api/run-account', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({key})});
+    const r = await res.json();
+    if (r.ok){
+      toast(r.message || ('已启动 ' + key));
+      showView('console', document.querySelector('[data-view="console"]'));
+      showJob('acct', document.querySelector('[data-job="acct"]'));
+      pollAcctJob();
+    }
+    else { toast('启动失败：' + (r.error || '未知错误')); }
+  }catch(e){ toast('请求失败：' + e); }
+}
+
+function pollAcctJob(){
+  if (acctJobTimer) clearInterval(acctJobTimer);
+  acctJobTimer = setInterval(async () => {
+    try{
+      const res = await fetch('/api/state');
+      const s = await res.json();
+      applyState(s, {keepView:true});
+      const j = s.acct_job || {};
+      if (!j.running){
+        clearInterval(acctJobTimer);
+        acctJobTimer = null;
+        const rr = j.result || {};
+        if (rr.ok) toast('本账号执行完成，本次领取 ' + (rr.credit_got || 0) + ' 积分');
+        else if (rr.error) toast('执行结束：' + rr.error);
+        load({keepView:true});
+      }
+    }catch(e){}
+  }, 3000);
+}
+
+async function runUiCode(key, code, ev){
+  if (ev) ev.stopPropagation();
+  if (uiCodeJobTimer || runAllTimer || acctJobTimer){ toast('已有任务正在执行，请稍候'); return; }
+  try{
+    const res = await fetch('/api/run-ui-code', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({key, code})});
+    const r = await res.json();
+    if (r.ok){
+      toast(r.message || ('已启动 ' + code));
+      showView('console', document.querySelector('[data-view="console"]'));
+      showJob('uicode', document.querySelector('[data-job="uicode"]'));
+      pollUiCodeJob();
+    }
+    else { toast('启动失败：' + (r.error || '未知错误')); }
+  }catch(e){ toast('请求失败：' + e); }
+}
+
+function pollUiCodeJob(){
+  if (uiCodeJobTimer) clearInterval(uiCodeJobTimer);
+  uiCodeJobTimer = setInterval(async () => {
+    try{
+      const res = await fetch('/api/state');
+      const s = await res.json();
+      applyState(s, {keepView:true});
+      // 修复：同jobData()，键名与后端 uicode_job 对齐
+      const j = (s.uicode_job || s.ui_code_job) || {};
+      if (!j.running){
+        clearInterval(uiCodeJobTimer);
+        uiCodeJobTimer = null;
+        const rr = j.result || {};
+        if (rr.ok && !rr.error) toast('任务执行完成：' + (rr.title || j.title || rr.skill || rr.code || ''));
+        else toast('任务执行结束：' + (rr.error || rr.err || '未知结果'));
+        load({keepView:true});
+      }
+    }catch(e){}
+  }, 3000);
+}
+
+// 空闲时每 10 秒自动同步一次（有任务在跑时由各轮询负责）
+setInterval(() => {
+  if (!runAllTimer && !acctJobTimer && !uiCodeJobTimer) load({keepView:true, silent:true});
+}, 10000);
+
+load();
+</script>
+</body>
+</html>
+
+
+
+
+
