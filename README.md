@@ -1,11 +1,59 @@
 # buddy-auto-checkin
 
+![Python](https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white)
+![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D6?logo=windows&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-green)
+![Zero deps](https://img.shields.io/badge/dependencies-none-brightgreen)
+![Lines](https://img.shields.io/badge/code-16.8k%20lines-blueviolet)
+
 WorkBuddy「Buddy 加油站」自动签到与成长任务工具。
+
+> English: Multi-account auto check-in and growth-task automation for **WorkBuddy / CodeBuddy**
+> desktop. Reads the local login session (no password ever stored), drives tasks via official
+> API **and** CDP browser automation, with a Windows Task Scheduler trigger and a built-in web
+> dashboard. Zero third-party dependencies.
 
 读取本机客户端的登录态，为多个账号自动完成每日签到与成长任务，
 支持 Windows 计划任务定时触发、桌面提醒与网页工作台。
 
 > **只用本机已登录的客户端做自动化，不存储明文密码，不向任何第三方上传数据。**
+
+---
+
+## 一眼看懂：它能做什么
+
+| | |
+|---|---|
+| **多账号统一调度** | 一个账号池（实测 20 个），串行切号、自动续期、断点续传（今天跑过的自动跳过） |
+| **签到 + 成长任务全套** | 每日签到、成长任务接取/领取、成长热度点亮、开盲盒、派 Buddy 出行、领出行奖励 |
+| **没有 API 的任务也做** | 通过 CDP 真实驱动客户端界面，补齐纯接口方案做不到的任务 |
+| **网页工作台** | 实时进度、一键全自动、随时停止、切号、续期、发现新账号，浏览器里点着用 |
+| **积分台账** | 不止告诉你"领了多少"，还告诉你**还剩多少、哪一批哪天几分过期、该先用哪个号** |
+| **工程化防御** | 付费/捐款类任务一票否决只记不刷；401 抖动重试后才判死，不误杀正常账号 |
+
+```bash
+python auto_buddy.py --discover     # 扫描本机登录态
+python auto_buddy.py --check        # 只查询不领取，先体检
+python auto_buddy.py --ui           # 打开网页工作台
+```
+
+---
+
+## 与同类项目的区别
+
+社区已有若干单账号签到脚本（如 `88lin/workbuddy-auto-signin` 等）。差异不在功能多少，而在 **规模与工程化程度**：
+
+| 维度 | 常见单账号脚本 | 本项目 |
+|---|---|---|
+| 账号规模 | 单账号 | **多账号池** + 切号调度 |
+| 无 API 的任务 | 做不了 | CDP 驱动界面完成 |
+| 工作台 | 命令行 + 日志 | 网页工作台 |
+| 积分视角 | 领了多少 | 剩余 / 过期倒计时 / 优先消耗 |
+| 付费任务拦截 | 无 | 一票否决 |
+| 平台 | Win / macOS / Linux | 仅 Windows |
+
+**我们不如别人的地方也写清楚**（详见 [`docs/开源同类项目对比.md`](docs/开源同类项目对比.md)）：
+不能云端运行（依赖本机开机）、仅 Windows、暂无断登补签与连登兑换、1.7 万行多模块比单文件脚本上手重。
 
 ---
 
@@ -98,11 +146,44 @@ buddy-auto-checkin/
 
 详见 [`log-protocol-guardian/README.md`](log-protocol-guardian/README.md)。
 
+## 积分台账（可用积分 + 过期倒计时）
+
+积分是**按资源包各自到期**的，不是一个总数统一失效。本项目把这件事做成台账：
+
+```bash
+python credit_report.py          # 刷新全部账号的积分与过期数据
+```
+
+产出 `logs/credits_report.html`：当前可用积分、每一批的到期时刻与倒计时（精确到分钟）、
+30 天过期时间轴、按账号的优先消耗建议。签到收尾时也会自动刷新（旁路，不影响签到结果）。
+
+数据来源为官方 billing 接口（`get-user-resource-summary` / `get-user-resource-free-packages`），
+非页面抓取；过期时间取资源包 `ExpiredTime` 与 `CycleEndTime` 中更早者。
+
 ## 环境要求
 
 - Windows 10/11
 - Python 3.9+
 - 已安装并登录 WorkBuddy 桌面客户端
+
+## 常见问题
+
+**Q：会不会泄露我的账号？**
+不会。仓库不含任何凭据，`accounts/`、`config.json`、`logs/`、`data/` 已被 `.gitignore` 永久忽略；
+工具只在本地读取客户端已有的登录态，不存储明文密码，不向第三方上传任何数据。
+发布前可用 `python tools/build_opensource.py` 生成脱敏包（手机号 / JWT 替换 + 出包校验）。
+
+**Q：为什么需要客户端在线？**
+部分成长任务没有开放接口，只能通过 CDP 驱动客户端界面完成，因此需要本机开机且客户端已登录。
+纯接口任务不受此限制。
+
+**Q：登录态失效怎么办？**
+凭证有效期约 28 天。执行 `--capture-all` 或在工作台点「一键续期」即可批量刷新；
+接口返回 401 时会重试确认后才判定失效，避免把临时抖动误判为作废。
+
+**Q：多账号会不会有风险？**
+本项目定位为「多账号统一管理」，用于管理本人名下账号。请遵守平台用户协议，
+勿用于批量注册或任何违反服务条款的用途。
 
 ## 许可
 
