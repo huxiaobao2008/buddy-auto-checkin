@@ -252,14 +252,21 @@ def discover_accounts():
     paths = []
     for d in C.auth_scan_dirs():
         paths.extend(glob.glob(os.path.join(d, "*.info")))
+    now_s = time.time()
     for path in paths:
         data = read_auth_file(path)
         if not data:
             continue
         uid = (data.get("account") or {}).get("uid") or "unknown"
+        # ⚠ 不能只按文件 mtime 取最新：切号备份的 mtime 是「备份时刻」，
+        # 备份一份旧凭证同样会刷新 mtime，于是「最新文件」可能是「最旧凭证」。
+        # 与 best_source_for_uid 保持一致：① 未过期优先 ② 剩余有效期最远 ③ mtime 最新。
+        exp = (data.get("auth") or {}).get("expiresAt")
+        remain = (exp / 1000 - now_s) if exp else -1e15
         mtime = os.path.getmtime(path)
-        if uid not in best or mtime > best[uid][0]:
-            best[uid] = (mtime, path, data)
+        rank = (remain > 0, remain, mtime)
+        if uid not in best or rank > best[uid][0]:
+            best[uid] = (rank, path, data)
     # config 里的明文昵称，用于回填被客户端加密的账号
     cfg_nick = {}
     try:
@@ -271,7 +278,9 @@ def discover_accounts():
     except Exception:
         pass
     out = []
-    for uid, (mtime, path, data) in sorted(best.items(), key=lambda kv: -kv[1][0]):
+    # 排序仍按文件 mtime 倒序（展示用），选取逻辑已在上面按「未过期 + 有效期最远」
+    for uid, (rank, path, data) in sorted(best.items(), key=lambda kv: -kv[1][0][2]):
+        mtime = rank[2]
         acct = data.get("account") or {}
         nick = plain(acct.get("nickname")) or plain(acct.get("phoneNumber"))
         if not nick:
