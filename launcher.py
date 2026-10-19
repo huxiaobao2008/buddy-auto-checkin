@@ -48,10 +48,16 @@ def find_python():
     cfg_py = cfg.get("python_path")
     if cfg_py and os.path.exists(cfg_py) and os.path.isfile(cfg_py):
         return cfg_py
-    known = [
-        r"C:\Users\Administrator\.workbuddy\binaries\python\versions\3.13.12\python.exe",
-        r"D:\empire_tools\green_tools\python\python.exe",
-    ]
+    # 动态探测：不要硬编码某个具体用户名/盘符，否则换台机器就是死路径。
+    known = []
+    wb_bin = os.path.join(os.path.expanduser("~"), ".workbuddy", "binaries", "python", "versions")
+    if os.path.isdir(wb_bin):
+        # 版本号目录按倒序取最新的（3.13.12 > 3.12.0）
+        for v in sorted(os.listdir(wb_bin), reverse=True):
+            p = os.path.join(wb_bin, v, "python.exe")
+            if os.path.isfile(p):
+                known.append(p)
+    known.append(os.path.join(BASE_DIR, ".venv", "Scripts", "python.exe"))
     for p in known:
         if os.path.exists(p):
             return p
