@@ -8,8 +8,14 @@
 
 行为与旧实现一致：
   - load_cred 校验凭证 uid 与配置 uid 一致（防抓错号）
-  - discover_accounts 扫全部 auth_scan_dirs，按 uid 去重取 mtime 最新
+  - discover_accounts 扫全部 auth_scan_dirs，按 uid 去重取「最优」登录态
   - capture 把当前/指定登录态存为某账号的凭证快照
+
+⚠ 全模块统一口径：判断登录态「新不新」一律看 token 的 expiresAt，**不看文件 mtime**。
+  切号备份的 mtime = 备份时刻，备份一份旧凭证同样会刷新 mtime，
+  因此「文件最新」可能恰恰是「凭证最旧」。选取优先级统一为：
+    ① 未过期优先 → ② 剩余有效期最远 → ③ mtime 最新（仅作同级兜底）
+  涉及：discover_accounts / best_source_for_uid / _best_sources_map / _capture_with_fallback。
 """
 
 import glob
