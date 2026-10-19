@@ -64,10 +64,33 @@ def menu_matches(menu_name, want_nick):
 
 
 def current_key():
-    """客户端当前登录账号在 config 里的 key（按菜单昵称匹配）。"""
-    cur = page_account() or {}
-    menu = cur.get("menuName")
+    """客户端当前登录账号在 config 里的 key。
+
+    匹配口径（2026-10-17 修复）：优先用「登录文件里的 uid」与 config 账号比对。
+    旧实现只按界面昵称匹配——而客户端 5.6.2+ 加密昵称后 config 里存的是脱敏
+    手机号（如 155****6188），与界面真实昵称（如「小宝·觉醒之旅」）永远对不上，
+    导致工作台「当前账号」高亮时有时无（昵称恰好是手机号的账号才能匹配上）。
+    界面昵称（CDP）只用于展示与最后兜底；CDP 不可达也不再让本函数整体失败。
+    """
+    menu = None
+    try:
+        cur = page_account() or {}
+        menu = cur.get("menuName")
+    except Exception:
+        menu = None
     cfg = CFG.load_config()
+    # 1) uid 匹配：登录文件是客户端真实身份的来源，不受昵称加密/界面重绘延迟影响
+    uid = None
+    try:
+        live = CR.read_auth_file(LIVE) or read_live()
+        uid = ((live or {}).get("account") or {}).get("uid")
+    except Exception:
+        uid = None
+    if uid:
+        for a in cfg.get("accounts") or []:
+            if a.get("uid") == uid:
+                return a.get("key"), menu
+    # 2) 兜底：界面昵称匹配（旧逻辑）
     for a in cfg.get("accounts") or []:
         if menu_matches(menu, a.get("nickname") or ""):
             return a.get("key"), menu
@@ -174,7 +197,17 @@ def atomic_write(path, obj):
         pass
 
 
-def switch_to(key, reload=True, verify=True, verify_max_sec=None):
+def probe_token_alive(cred, timeout=8):
+    """切号前探活：确认目标凭证在服务端仍有效（实现见 core.creds.auth_alive）。
+
+    True=可安全写入活登录文件；False=确定被吊销（401/403），必须中止——
+    把死 token 写进活登录文件 + reload，客户端会发现会话无效并强制退出登录，
+    把当前正在使用的在线账号也踢下线；None=无法判定（网络异常），不阻断。
+    """
+    return CR.auth_alive(cred.get("auth") or {}, timeout=timeout)
+
+
+def switch_to(key, reload=True, verify=True, verify_max_sec=None, probe=True):
     # 纵深防御（串行铁则）：切号是破坏性操作，若调用方未持有客户端占用令牌，
     # 说明存在绕过互斥的路径——此时明确报错，而不是默默切错账号。
     # 编排层（run_all / batch）在令牌持有期调用，Web 手动切号同样持令牌，
@@ -223,6 +256,20 @@ def switch_to(key, reload=True, verify=True, verify_max_sec=None):
         out["ok"] = False
         out["err"] = "目标账号缺少 accessToken"
         return out
+
+    # 服务端探活：确定被吊销（401/403）则中止，绝不把死 token 写进活登录文件
+    # （写死 token + reload = 客户端强制退出登录，会连累当前在线账号）。
+    # 重新登录该账号的正规路径：客户端内登录 → 工作台「续期」抓新凭证。
+    if probe:
+        alive, probe_detail = probe_token_alive(cred)
+        out["probe"] = probe_detail
+        if alive is False:
+            out["ok"] = False
+            out["err"] = (
+                "目标账号凭证已被服务端吊销（%s），切号已中止以保护当前在线账号；"
+                "请先在客户端重新登录该账号，再点「续期」抓取新凭证" % probe_detail
+            )
+            return out
 
     live = read_live()
     if live.get("__error__"):

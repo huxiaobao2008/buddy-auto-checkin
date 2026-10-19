@@ -287,6 +287,7 @@ tr:hover td{background:rgba(68,136,255,0.04)}
         <div class="stat"><b id="s-credits">-</b><span>累计签到积分</span></div>
         <div class="stat warn"><b id="s-pending">-</b><span>总待领积分</span></div>
         <div class="stat"><b id="s-remain">-</b><span>总可用积分</span></div>
+        <div class="stat danger"><b id="s-expire7">-</b><span>7天内将过期</span></div>
       </div>
       <div class="toolbar">
         <span class="modegrp">
@@ -296,6 +297,7 @@ tr:hover td{background:rgba(68,136,255,0.04)}
         </span>
         <button class="primary" onclick="runAll()" id="btn-runall">⚡ 一键全自动</button>
         <button class="danger" onclick="stopAll()" id="btn-stop" title="立即停止正在跑的任务">■ 停止任务</button>
+        <button onclick="window.open('/credits','_blank')">📊 积分台账</button>
         <button onclick="act('capture-all',{})">续期全部凭证</button>
         <button onclick="act('open-client',{})">打开客户端登录</button>
         <!-- <button onclick="act('sync',{})">扫描新账号</button> -->
@@ -394,6 +396,17 @@ tr:hover td{background:rgba(68,136,255,0.04)}
   </main>
 </div>
 <div id="toast"></div>
+<!-- 续期结果明细面板（2026-10-17 新增：批量续期逐账号可见，不再只弹一句汇总） -->
+<div id="renewpanel" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99">
+  <div style="max-width:640px;max-height:70vh;overflow:auto;margin:8vh auto;background:#1a1f2e;border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:18px 20px;color:#dfe6f3">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <b>凭证续期明细</b>
+      <button onclick="$('renewpanel').style.display='none'">关闭</button>
+    </div>
+    <div class="sub" style="margin-bottom:10px">说明：续期 = 把本机最新登录态快照复制为凭证；有效期能否变长取决于客户端是否刷新过该账号 token（客户端只在账号登录使用期间刷新）。「token 未变化」表示本机没有更新的快照可拿。</div>
+    <table class="disctable" style="width:100%"><thead><tr><th>账号</th><th>结果</th><th>说明</th></tr></thead><tbody id="renewrows"></tbody></table>
+  </div>
+</div>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -447,15 +460,36 @@ function credCell(c, b){
   return h || '<span class="tag mute">无数据</span>';
 }
 
+// 积分台账单元格：行内直显「可用积分 + 最近一批过期倒计时」。
+// 数据来自签到流程自动生成的快照（logs/credits_report.json），零额外请求；
+// 完整明细（过期批次 / 时间轴 / 优先消耗顺序）点工具栏「📊 积分台账」查看。
+function ledgerCell(led){
+  if (!led || (led.alive !== 0 && !led.alive)){
+    return '<span class="uid">未生成台账 · 跑一次签到即自动出现</span>';
+  }
+  const secs = (led.next_secs == null) ? 9e18 : led.next_secs;
+  const DAY = 86400;
+  const tagCls = secs <= 3*DAY ? 'danger' : (secs <= 7*DAY ? 'warn' : 'ok');
+  const expireTxt = led.next_expire
+    ? `<span class="tag ${tagCls}" title="该账号最近一批积分的到期时间">${esc(String(led.next_expire).slice(5,16))} · 剩 ${esc(led.next_countdown||'')}</span>`
+    : '<span class="tag mute">无待过期</span>';
+  const e7 = led.expiring_7d > 0
+    ? ` · <span class="pending">7天内过期 ${led.expiring_7d}</span>` : '';
+  return `<span class="uid">可用 <b>${Number(led.alive).toFixed(2)}</b></span> ${expireTxt}${e7}`;
+}
+
 function accCard(a, slot){
   const names = (STATE && STATE.account_names) || {};
   const s = a.task_summary || {};
   const pct = s.total ? Math.round(100 * s.done / s.total) : 0;
   const full = s.total && s.done === s.total;
+  // 修复（2026-10-17）：cred_expiry_days 可能为 null（凭证缺 expiresAt 字段），
+  // 原先会直接渲染成「剩 null 天」。
   const cred = !a.cred_ok
     ? `<span class="tag danger" title="${esc(a.cred_error)}">无凭证</span>`
     : (a.cred_expired ? '<span class="tag danger">已过期</span>'
-      : `<span class="tag ${a.cred_expiry_days<7?'warn':'ok'}">剩 ${a.cred_expiry_days} 天</span>`);
+      : (a.cred_expiry_days == null ? '<span class="tag mute">有效期未知</span>'
+      : `<span class="tag ${a.cred_expiry_days<7?'warn':'ok'}">剩 ${a.cred_expiry_days} 天</span>`));
   const initial = (a.label || a.key || '?').slice(0,1).toUpperCase();
   const active = a.key === VIEW_KEY;
   return `<div class="acc ${active?'active':''} ${a.is_current_client?' current-client':''}" onclick="toggleView('${a.key}',event,'${slot}')">
@@ -472,6 +506,7 @@ function accCard(a, slot){
       </div>
     </div>
     <div class="row"><span class="lbl">积分</span><div>${credCell(a.credits, a.balance)}</div></div>
+    <div class="row"><span class="lbl">可用/过期</span><div>${ledgerCell(a.credit_ledger)}</div></div>
     <div class="row"><span class="lbl">成长任务</span>
       <div class="pbar"><i class="${full?'full':''}" style="width:${pct}%"></i></div>
       <span class="uid">${s.done||0}/${s.total||0}${s.pending_credit?` · <span class="pending">可领${s.pending_credit}</span>`:''}</span>
@@ -855,6 +890,16 @@ else if (!j.tail || j.tail.trim() === ''){ statusEl.textContent = '待执行'; s
   // 分别解析 API 和 UI 任务
   const apiAccs = parseAccountPipe(tail, 'api');
   const uiAccs = parseAccountPipe(tail, 'ui');
+
+  // 修复（2026-10-17）：任务已结束时强制收尾所有账号状态。
+  // parseAccountPipe 里最后一个被 ensure() 的账号 active 恒为 true（后面没有
+  // 新账号把它顶掉），任务明明完成了，该账号卡片仍显示「● 执行中」脉冲——
+  // 这正是「任务都完成了却像一直在进行」的显示 bug。
+  if (!running){
+    [apiAccs, uiAccs].forEach(list => list.forEach(a => {
+      if (a.active){ a.active = false; if (!a.err) a.done = true; }
+    }));
+  }
   
   // 渲染 API 任务流水线（始终显示）
   renderFlowTrack(apiTrack, apiSummary, apiAccs, names, 'api', d.kind);
@@ -986,12 +1031,22 @@ function applyState(s, opts){
   $('s-accounts').textContent = s.totals.accounts;
   $('s-signed').textContent = s.totals.signed_today;
   $('s-credits').textContent = s.totals.total_credits;
-  $('s-pending').textContent = s.totals.potential_credits || 0;
+  // 修复（2026-10-17）：「总待领积分」应显示「当前可领取积分」(pending_credits)，
+  // 原先错读 potential_credits（未完成任务的未来可得积分），口径与标签不符。
+  $('s-pending').textContent = s.totals.pending_credits || 0;
   const rem = s.totals.remaining_credits;
   const remEl = $('s-remain');
   remEl.textContent = (rem == null) ? '—' : Number(rem).toFixed(2);
   const unk = s.totals.remaining_unknown || [];
   remEl.title = unk.length ? '未能读取余额：' + unk.join('、') : '各账号剩余额度之和';
+  // 7天内将过期：来自积分台账快照（签到时自动刷新），用于决定先用哪个号
+  const ex7 = $('s-expire7');
+  if (ex7){
+    ex7.textContent = (s.totals.ledger_expiring_7d == null)
+      ? '—' : Number(s.totals.ledger_expiring_7d).toFixed(2);
+    ex7.title = s.totals.ledger_ts
+      ? '台账快照时间：' + s.totals.ledger_ts : '尚无积分台账，跑一次签到后自动生成';
+  }
   if (!opts.keepView) VIEW_KEY = '';
   CLIENT_KEY = (s.client_current && s.client_current.key) || '';
   MAIN_KEY = (s.accounts[0] && s.accounts[0].key) || '';
@@ -1132,6 +1187,19 @@ async function act(name, payload){
     if (r.results){
       const ok = r.results.filter(x=>x.status==='success').length;
       if (r.results.length > 1) toast(`执行完成：${ok}/${r.results.length} 个账号成功`);
+    }
+    // 批量续期：弹逐账号明细面板（2026-10-17，用户反馈「点了像没续上，看不见过程」）
+    if (name === 'capture-all' && r.rows){
+      const tb = $('renewrows');
+      if (tb){
+        const names = (STATE && STATE.account_names) || {};
+        tb.innerHTML = r.rows.map(x =>
+          `<tr><td>${esc(names[x.key] || x.key)}</td>` +
+          `<td><span class="tag ${x.rc===0?'ok':(x.rc===3?'danger':'warn')}">${esc(x.status || '')}</span></td>` +
+          `<td class="uid">${esc(x.message || '')}</td></tr>`
+        ).join('');
+        $('renewpanel').style.display = 'block';
+      }
     }
     load({keepView:true});
   }catch(e){

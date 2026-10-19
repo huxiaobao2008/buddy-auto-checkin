@@ -73,8 +73,15 @@ UI_CODE_JOB_LOG_PATH = os.path.join(CFG.LOG_DIR, "run_ui_code_server.log")
 
 
 def _state_bust():
+    """让缓存过期（后台线程随即重建），但保留旧数据继续展示。
+
+    修复（2026-10-17）：原实现把 data 一起清空，导致任何操作（续期/启停/增删/
+    单账号执行完成）之后，前端拿到的是「空状态」——账号列表消失、统计归零、
+    客户端登录条显示「未检测到」，要等后台重建（20 个账号逐一查 API，约 30~60 秒）
+    才恢复。这正是用户看到的「工作台闪空/高亮时有时无」的主因之一。
+    保留旧数据、只重置时间戳：后台重建完成后自动换新，期间页面不闪空。
+    """
     STATE_CACHE["ts"] = 0.0
-    STATE_CACHE["data"] = None
 
 
 def _infer_area(msg):
@@ -84,10 +91,14 @@ def _infer_area(msg):
     使「阶段一 API」相关行被前端错投到 UI 区域。此处按关键词归类。
     """
     s = str(msg or "")
-    if any(k in s for k in ("收尾领取", "领取", "claim", "积分到账")):
-        return LP.AREA_CLAIM
+    # 修复（2026-10-17）：先判 API 关键词再判「领取」——API 汇总行
+    # 「签到/API: …本次接取 0 个、领取 0 个（+0 积分）」自带「领取」二字，
+    # 原先会被错标成 claim 区。调整顺序后：含签到/API 等词的归 api，
+    # 只有真正的收尾领取行（无 API 词、含领取/到账）才归 claim。
     if any(k in s for k in ("阶段一", "API", "签到", "盲盒", "猫猫", "热度", "出行")):
         return LP.AREA_API
+    if any(k in s for k in ("收尾领取", "领取", "claim", "积分到账")):
+        return LP.AREA_CLAIM
     return LP.AREA_UI
 
 
@@ -113,6 +124,14 @@ def _pmap(fn, items, workers=4):
 # --------------------------------------------------------------------------- #
 def run_all_status():
     tail = ""
+    # 无论任务是否在执行，都读取日志尾部：
+    # 任务正在跑时前端要看到实时进度；任务结束后前端要能看到最终结果
+    # （并据此判定「已手动停止」），否则停止状态永远显示不出来。
+    try:
+        with open(RUN_ALL_LOG_PATH, "r", encoding="utf-8", errors="replace") as fh:
+            tail = "\n".join(fh.read().splitlines()[-200:])
+    except Exception:
+        pass
     running = bool(RUN_ALL_PROC and RUN_ALL_PROC.poll() is None)
     # server 重启后 RUN_ALL_PROC 会丢失，但 run_all 子进程可能仍在写日志：
     # 以日志文件最后写入新鲜度（60 秒内）作为补充判据，保证前端状态真实。
@@ -122,14 +141,17 @@ def run_all_status():
             running = (time.time() - mtime) <= 60.0
         except OSError:
             running = False
-    # 无论任务是否在执行，都读取日志尾部：
-    # 任务正在跑时前端要看到实时进度；任务结束后前端要能看到最终结果
-    # （并据此判定「已手动停止」），否则停止状态永远显示不出来。
-    try:
-        with open(RUN_ALL_LOG_PATH, "r", encoding="utf-8", errors="replace") as fh:
-            tail = "\n".join(fh.read().splitlines()[-200:])
-    except Exception:
-        pass
+    # 修复（2026-10-17）：日志已写「完成标记」就不能再判 running——
+    # 任务收尾写盘与进程退出之间有时间差，新鲜度判据会让已完成任务
+    # 在长达 60 秒内被前端显示成「运行中」（用户反馈：任务都做完了还像在进行）。
+    # 注意：只认日志末尾的 [done] 受控标记；不能用「全部完成」做子串匹配——
+    # 排序日志里有「全部完成的排最后」，会误命中把整个运行期判成未运行。
+    if running and tail:
+        _lines = [x for x in tail.strip().split("\n") if x.strip()]
+        for line in reversed(_lines[-8:]):
+            if _line_area(line) == LP.AREA_DONE:
+                running = False
+                break
     # 判断是不是被手动停止的。
     # 修复点：原逻辑只要最后 10 行里出现「停止」二字就判定 stopped，
     # 而「[停止] 收到停止指令」本身也会写入日志、正常完成的汇总里也可能
@@ -142,7 +164,8 @@ def run_all_status():
         for line in reversed(lines):
             area = _line_area(line)
             # 完成标记优先级最高：出现即代表正常结束
-            if area == LP.AREA_DONE or "全部完成" in line:
+            # （「全部完成。」带句号，避免误中排序日志里的「全部完成的排最后」）
+            if area == LP.AREA_DONE or "全部完成。" in line:
                 stopped = False
                 break
             if area in (LP.AREA_UI, LP.AREA_CLAIM, LP.AREA_API) and (
@@ -364,41 +387,27 @@ def _run_account_job(key):
             _emit(LP.AREA_CLAIM, m)
 
         try:
-            # 先检查一下有没有能自动完成的任务未完成
+            # 先检查一下有没有能自动完成的任务未完成（仅作日志展示）
+            # 修复（2026-10-17）：原先这里「全部完成就直接 return」，会把阶段一的
+            # 每日签到/盲盒/出行也一起跳过——成长任务做完不等于今天签过到，
+            # 15/15 的账号点「执行本账号」会漏掉当天签到积分。
+            # UI 阶段的跳过由下方 _should_skip_ui_tasks 负责，这里不再短路。
             _cred, _e = CR.load_cred(acc)
             if _cred:
                 _lst, _le = T.fetch_tasks(_cred, cfg)
                 if not _le:
                     _s = T.summarize(_lst)
                     log("服务端进度 %s/%s" % (_s.get("done"), _s.get("total")))
-                    # 计算能自动完成的任务数
-                    _auto_total = 0
-                    _auto_done = 0
-                    for _t in _lst:
-                        _code = _t.get("code", "")
-                        _skip_codes = cfg.get("skip_tasks", {}).get("codes", [])
-                        if _code in _skip_codes:
-                            continue  # 跳过的任务不算
-                        _auto_total += 1
-                        if _t.get("done", 0) >= _t.get("need", 1):
-                            _auto_done += 1
-                    if _auto_done >= _auto_total:
-                        log("所有能自动完成的任务都已完成，无需执行")
-                        _res = {
-                            "ok": True,
-                            "skipped_ui": True,
-                            "skip_reason": "所有能自动完成的任务都已完成",
-                            "credit_got": 0,
-                            "ui_got": 0,
-                            "claim_got": 0,
-                            "server_done": _s.get("done"),
-                            "server_total": _s.get("total"),
-                        }
-                        ACCT_JOB["result"] = _res
-                        return
             log("阶段一：签到 / 出行 / API 成长任务 / 热度 / 盲盒 / 猫猫")
             r = MA.run_account(acc, cfg)
             log("签到/API: %s | %s" % (r.get("status"), r.get("reason")))
+            # 修复（2026-10-17）：API 阶段实得（成长任务领取 + 每日签到 gained）
+            # 此前完全没计入结果，toast「本次领取 X 积分」漏掉签到的大头。
+            _gt = (r.get("tasks") or {}).get("growth_tasks") or {}
+            _ck = (r.get("tasks") or {}).get("checkin") or {}
+            api_got = int(_gt.get("credit_got") or 0) + int(
+                ((_ck.get("data") or {}).get("gained")) or 0
+            )
 
             skip, why = _should_skip_ui_tasks(acc, cfg)
             ui_got = 0
@@ -431,7 +440,8 @@ def _run_account_job(key):
                 "api": r.get("status"),
                 "skipped_ui": skip,
                 "skip_reason": why,
-                "credit_got": ui_got + claim_got,
+                "credit_got": api_got + ui_got + claim_got,
+                "api_got": api_got,
                 "ui_got": ui_got,
                 "claim_got": claim_got,
             }
@@ -810,16 +820,51 @@ def discovered_state(cfg):
 
 
 def client_current_state():
+    """客户端当前登录：登录文件 uid 为主，CDP 界面昵称为辅。
+
+    修复（2026-10-17）：原实现完全依赖 CDP 读界面昵称——CDP 短暂抖动就整体
+    判为不可达，前端高亮/登录条随之消失（用户反馈「有时候显示有时候不显示」）。
+    现改为：能读到登录文件 uid 即视为可达（客户端身份以登录文件为准），
+    CDP 只用于补充界面昵称展示；昵称缺省时回退 config 里的账号名。
+    """
+    key, menu, uid_live, err = "", "", "", ""
     try:
-        key, menu = AS.current_key()
-        return {"reachable": True, "key": key or "", "menu": menu or "", "error": ""}
+        j = CR.read_auth_file(CFG.CURRENT_AUTH) or CFG.load_json(CFG.CURRENT_AUTH) or {}
+        uid_live = ((j or {}).get("account") or {}).get("uid") or ""
+    except Exception:
+        pass
+    try:
+        k2, m2 = AS.current_key()
+        key, menu = k2 or "", m2 or ""
     except Exception as e:
-        return {
-            "reachable": False,
-            "key": "",
-            "menu": "",
-            "error": "%s: %s" % (type(e).__name__, e),
-        }
+        err = "%s: %s" % (type(e).__name__, e)
+    # uid 读到了但没匹配上 config（current_key 内部另有兜底）：这里再按 uid 直接比一次
+    if uid_live and not key:
+        try:
+            cfg = CFG.load_config()
+            for a in cfg.get("accounts") or []:
+                if a.get("uid") == uid_live:
+                    key = a.get("key") or ""
+                    break
+        except Exception:
+            pass
+    # 昵称缺失时用 config 里的账号名补展示（label 优先，那是用户认得的备注）
+    if key and not menu:
+        try:
+            cfg = CFG.load_config()
+            acc = CFG.find_account(cfg, key)
+            if acc:
+                menu = acc.get("label") or acc.get("nickname") or ""
+        except Exception:
+            pass
+    reachable = bool(uid_live) or bool(menu)
+    return {
+        "reachable": reachable,
+        "key": key,
+        "menu": menu,
+        "uid": uid_live,
+        "error": "" if reachable else (err or "未读到客户端登录文件"),
+    }
 
 
 def _build_state_sync():
@@ -837,6 +882,36 @@ def _build_state_sync():
         a["is_current_client"] = bool(client_current.get("reachable")) and a[
             "key"
         ] == client_current.get("key")
+
+    # 积分台账：读签到流程自动生成的快照（logs/credits_report.json），零额外请求。
+    # 行内只展示决策字段（可用积分 / 最近过期 / 倒计时 / 7天内将过期），
+    # 完整明细（过期批次、时间轴、优先消耗顺序）在独立报告页 /credits 查看。
+    ledger = {}
+    ledger_ts = ""
+    try:
+        from core import credits as CRE
+
+        _rep = CRE.load_report()
+        ledger_ts = _rep.get("generated_at") or ""
+        for _r in _rep.get("accounts") or []:
+            if _r.get("err"):
+                continue
+            _n = (_r.get("buckets") or [None])[0]
+            _b = CRE._bands(_r)
+            ledger[_r.get("key")] = {
+                "alive": round(_r.get("alive_sum") or 0, 2),
+                "next_expire": _n["expire"] if _n else "",
+                "next_countdown": CRE.human(_n["secs"]) if _n else "",
+                "next_secs": _n["secs"] if _n else CRE.FAR,
+                "expiring_7d": round(_b["d1"] + _b["d3"] + _b["d7"], 2),
+                "expiring_30d": _b["d30"],
+                "packages_with_remain": _r.get("packages_with_remain") or 0,
+                "packages_total": _r.get("packages_total") or 0,
+            }
+    except Exception:
+        ledger, ledger_ts = {}, ""
+    for a in accounts:
+        a["credit_ledger"] = ledger.get(a.get("key")) or {}
 
     total = sum((a["credits"] or {}).get("total_credits") or 0 for a in accounts)
     pending = sum(
@@ -876,10 +951,19 @@ def _build_state_sync():
             "accounts": len(accounts),
             "signed_today": signed,
             "total_credits": total,
-            "pending_credits": potential,
+            # 修复（2026-10-17）：原先 pending_credits 错填成 potential（上面算好的
+            # pending 变量根本没被用上），「总待领积分」永远显示的是
+            # 「未完成任务的未来可得积分」而非「当前可领取积分」。
+            "pending_credits": pending,
             "potential_credits": potential,
             "remaining_credits": round(remaining, 2),
             "remaining_unknown": remaining_unknown,
+            # 积分台账（资源包口径，与签到积分是两套账）
+            "ledger_total": round(sum(v["alive"] for v in ledger.values()), 2),
+            "ledger_expiring_7d": round(
+                sum(v["expiring_7d"] for v in ledger.values()), 2
+            ),
+            "ledger_ts": ledger_ts,
         },
         "client_exe": next(
             (p for p in CFG.CLIENT_EXE_CANDIDATES if p and os.path.exists(p)), ""
@@ -931,11 +1015,29 @@ def build_state(use_cache=True):
     # 第一次启动时，如果没有缓存，先返回空数据，让 server 马上能响应
     # 然后在后台线程里一次性加载所有账号的数据
     if STATE_CACHE["data"] is None:
+        # 修复（2026-10-17）：空状态也要带上「客户端当前登录」（只读登录文件 uid，
+        # 不碰 CDP，毫秒级）。否则首次启动的 30~60 秒里登录条/高亮一直显示
+        # 「未检测到客户端登录状态」，与真实状态不符。
+        cc_quick = {"reachable": False, "key": "", "menu": "", "error": ""}
+        try:
+            _j = CR.read_auth_file(CFG.CURRENT_AUTH) or CFG.load_json(CFG.CURRENT_AUTH) or {}
+            _uid = ((_j or {}).get("account") or {}).get("uid") or ""
+            if _uid:
+                cc_quick["reachable"] = True
+                cc_quick["uid"] = _uid
+                for _a in CFG.load_config().get("accounts") or []:
+                    if _a.get("uid") == _uid:
+                        cc_quick["key"] = _a.get("key") or ""
+                        cc_quick["menu"] = _a.get("label") or _a.get("nickname") or ""
+                        break
+        except Exception:
+            pass
         empty = {
             "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "accounts": [],
             "account_names": {},
             "discovered": [],
+            "client_current": cc_quick,
             "warnings": ["正在加载账号数据，请稍候..."],
             "totals": {
                 "accounts": 0,
@@ -1050,30 +1152,31 @@ def action_capture(payload):
         acc = CFG.find_account(cfg, payload.get("key"))
         if not acc:
             return {"ok": False, "error": "列表里没有 %s" % payload.get("key")}
-        src = next(
-            (d for d in CR.discover_accounts() if d["uid"] == acc.get("uid")), None
-        )
-        if src:
-            rc, msg = CR.capture(acc, source=src["path"])
-            return {"ok": rc == 0, "message": msg, "error": "" if rc == 0 else msg}
-        rc, msg = CR.capture(acc)
-        if rc == 0:
-            return {"ok": True, "message": msg}
+        # 在该 uid 的全部本地快照里逐个探活抓取：优先「真能用的」，而不是「理论上
+        # 有效期最长的」（旧长命会话可能已被服务端清掉，2026-10-18 d/e/f 事故）。
+        rc, msg = CR.capture_best(acc)
         return {
-            "ok": False,
-            "error": msg,
-            "need_login": True,
-            "hint": "本机没有该账号的登录态，请打开客户端扫码登录后重试",
+            "ok": rc == 0,
+            "error": "" if rc == 0 else msg,
+            "message": msg,
+            "status": {0: "已续期", 3: "已过期"}.get(rc, "失败"),
+            "expired": rc == 3,
+            "need_login": rc != 0,
+            "hint": "本机没有该账号的可用登录态，请打开客户端登录该账号后重试" if rc != 0 else "",
         }
 
 
 def action_capture_all(payload):
     with LOCK:
-        ok, skipped = CR.capture_all_possible()
+        rows = CR.renew_all_with_status()
+    renewed = [r["key"] for r in rows if r["rc"] == 0]
+    failed = [r["key"] for r in rows if r["rc"] != 0]
     return {
-        "ok": not skipped,
-        "message": "已续期 %d 个：%s" % (len(ok), ", ".join(ok) or "无"),
-        "skipped": skipped,
+        "ok": len(failed) == 0,
+        "renewed": renewed,
+        "failed": failed,
+        "rows": rows,
+        "message": "已续期 %d 个，失败 %d 个" % (len(renewed), len(failed)),
     }
 
 
@@ -1347,6 +1450,24 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self._send(500, "界面文件读取失败：%s" % e, "text/plain; charset=utf-8")
             return
+        if path in ("/credits", "/credits.html"):
+            # 完整积分台账报告（含过期批次明细 / 30 天时间轴 / 优先消耗顺序）
+            try:
+                from core import credits as CRE
+
+                _p = CRE.REPORT_HTML
+                if not os.path.exists(_p):
+                    self._send(
+                        404,
+                        "还没有积分台账，请先执行 python credit_report.py 或跑一次签到",
+                        "text/plain; charset=utf-8",
+                    )
+                    return
+                with open(_p, encoding="utf-8") as f:
+                    self._send(200, f.read(), "text/html; charset=utf-8")
+            except Exception as e:
+                self._send(500, "报告读取失败：%s" % e, "text/plain; charset=utf-8")
+            return
         if path == "/api/state":
             try:
                 self._json(build_state())
@@ -1444,6 +1565,15 @@ def serve(port=8765, open_browser=True):
                 continue
     except ImportError:
         # psutil 没装就跳过，不影响正常启动
+        pass
+    # 修复（2026-10-17）：启动时清掉历史停止标记。STOP_ALL 是跨进程文件，
+    # 点过「停止任务」后一直留在磁盘上，导致新启动的工作台 states 里
+    # stopping 恒为 True（前端出现「停止中/已停止」残留提示，像任务卡在进行中）。
+    # 停止标记只对「正在跑的任务」有意义；服务刚启动时没有本进程发起的任务在跑，
+    # 若恰好有 run_all 子进程在跑，它启动时会自行 clear_stop，不受影响。
+    try:
+        CFG.clear_stop()
+    except Exception:
         pass
     httpd = _QuietServer(("127.0.0.1", port), Handler)
     url = "http://127.0.0.1:%d/" % port

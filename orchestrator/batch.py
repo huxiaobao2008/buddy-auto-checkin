@@ -279,6 +279,16 @@ def _resolve_ui_codes(key, acct, cfg, log=print):
     """
     dyn, dyn_err = _undone_ui_codes(key, acct, cfg, log)
     if dyn is None:
+        # 登录态失效（401/403）= 凭证已被服务端吊销：绝不能回退全量清单继续跑——
+        # 后续切号会把死 token 写进活登录文件，客户端 reload 后强制下线，
+        # 把当前正在使用的在线账号也踢掉（2026-10-18 凌晨真实事故：d/e/f 失效
+        # 导致在线的 account_o 被挤下线）。此时直接跳过本账号 UI 阶段。
+        if dyn_err and ("登录态失效" in dyn_err or "401" in dyn_err or "403" in dyn_err):
+            log(
+                "  [动态清单] 拉取失败（%s）——凭证已被服务端吊销，"
+                "本账号跳过 UI 阶段（不切号，保护当前在线账号）" % dyn_err
+            )
+            return [], "auth_dead"
         log("  [动态清单] 拉取失败（%s），回退硬编码全量清单" % dyn_err)
         return ["template_5", "Model_chat_GLM5.2"] + list(UI_CODES), "fallback"
     log(
@@ -1347,6 +1357,15 @@ def run_account(
         # 动态清单：只跑该账号真实未达标的 UI 任务（2026-09-24 修复：
         # 之前硬编码全量 UI_CODES，账号已完成 15/19 也会打印全部阶段标题，误导观察）
         codes, _src = _resolve_ui_codes(key, acct, cfg, log)
+        if _src == "auth_dead":
+            # 凭证已被服务端吊销：不切号、不跑 UI（切号会把死 token 写进活登录文件，
+            # 客户端 reload 后强制下线，会连累当前在线账号）
+            out["err"] = (
+                "登录态失效（401/403）：已跳过切号与 UI 任务；"
+                "请在客户端重新登录该账号后抓取/续期凭证"
+            )
+            log("  [跳过] %s" % out["err"])
+            return out
     codes = list(dict.fromkeys(codes))
     chat_codes = [c for c in codes if c in CHAT_CODES]
     panel_codes = [c for c in codes if c in PANEL_CODES]

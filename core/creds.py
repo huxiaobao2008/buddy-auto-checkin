@@ -126,6 +126,51 @@ def cred_expiry_days(cred):
     return (exp / 1000 - time.time()) / 86400.0
 
 
+def auth_alive(auth, timeout=8, retries=2, retry_delay=1.5):
+    """探活：用 accessToken 调只读状态接口，确认服务端是否仍认可该会话。
+
+    返回 (alive, detail)：
+      True  = 服务端认可；False = 确定被吊销（HTTP 401/403，已重试确认）；
+      None  = 无法判定（网络异常/非鉴权错误/连接失败），调用方**不阻断**。
+
+    为什么要重试：服务端 401 可能是**临时抖动**而非真的吊销——2026-10-18 凌晨
+    account_d/e/f 全部 401，但 17 小时后同样的 token 又全部 200 复活，期间
+    用户什么都没做。因此单次 401 不足以判定失效，必须重试确认后才判死；
+    而网络异常（超时/连接重置）连一次判定都不做，直接放行，避免误伤正常切号/续期。
+    """
+    import urllib.error
+    import urllib.request
+
+    tok = (auth or {}).get("accessToken")
+    dom = (auth or {}).get("domain") or "www.codebuddy.cn"
+    if not tok or isinstance(tok, dict):
+        return None, "无明文 token，跳过探活"
+
+    last = None
+    for attempt in range(retries + 1):
+        req = urllib.request.Request(
+            "https://%s/v2/billing/meter/checkin-activity-status" % dom,
+            data=b"{}",
+            method="POST",
+            headers={"Authorization": "Bearer " + tok,
+                     "Content-Type": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return True, "HTTP %s" % r.status
+        except urllib.error.HTTPError as e:
+            if e.code in (401, 403):
+                last = "HTTP %s" % e.code
+                if attempt < retries:
+                    time.sleep(retry_delay)
+                    continue
+                return False, last
+            return None, "HTTP %s（非鉴权错误，不阻断）" % e.code
+        except Exception as e:
+            return None, "%s（网络异常，不阻断）" % type(e).__name__
+    return None, last or "未知"
+
+
 _ID_RE = re.compile(r"^[\d\-\s_]+$")
 
 
@@ -248,8 +293,61 @@ def discover_accounts():
     return out
 
 
+def _all_sources_for_uid(uid):
+    """扫全部登录态目录，返回该 uid 的所有可用登录态 (path, expiresAt) 列表。"""
+    out = []
+    for d in C.auth_scan_dirs():
+        for path in glob.glob(os.path.join(d, "*.info")):
+            try:
+                data = read_auth_file(path)
+            except Exception:
+                continue
+            if not data:
+                continue
+            if (data.get("account") or {}).get("uid") != uid:
+                continue
+            exp = (data.get("auth") or {}).get("expiresAt")
+            out.append((path, exp))
+    return out
+
+
+def best_source_for_uid(uid):
+    """该 uid 当前能取到的最新鲜登录态文件：token 有效期最远优先，其次 mtime 最新。
+
+    续期本质是「复制磁盘上的登录态快照」而非服务端刷新令牌（已验证服务端不会在
+    响应里回刷 accessToken，切号也只搬运已有 token）。因此「最新鲜」= 选有效期最远的
+    那一份，尽量让续期得到的 token 离过期最远。
+
+    注意：在线号同样走这里，不要强制绑到活文件——活文件往往是当前有效期最短的那
+    一份，而备份快照里常有更长的有效期；统一取最远有效期才能给续期最长寿命。
+    """
+    sources = _all_sources_for_uid(uid)
+    if not sources:
+        return None
+    # 只保留未过期的来源，避免挑中已失效凭证
+    now_s = time.time()
+    sources = [(p, e) for (p, e) in sources if e and e / 1000 - now_s > 0]
+    if not sources:
+        return None
+    now_ms = time.time() * 1000
+
+    def score(item):
+        path, exp = item
+        exp_score = (exp - now_ms) if exp else -1e15
+        return (exp_score, os.path.getmtime(path))
+
+    return max(sources, key=score)[0]
+
+
 def capture(account, allow_mismatch=False, source=None):
-    """把客户端当前登录（或指定登录态文件）存为该账号的凭证快照。返回 (rc, msg)。"""
+    """把客户端当前登录（或指定登录态文件）存为该账号的凭证快照。返回 (rc, msg)。
+
+    rc:
+      0  = 已写入凭证快照（相较原凭证有变化则代表拿到了更长的有效期；未变化也视为成功，
+           因为有效期依然有效）。续期按钮据此统一报成功。
+      2  = 无可用登录态 / uid 不符（需先在客户端登录该账号）
+      3  = 来源 token 已过期（续期得到的是失效凭证，需重新登录）
+    """
     src = source or C.CURRENT_AUTH
     data = read_auth_file(src)
     if not data:
@@ -265,6 +363,21 @@ def capture(account, allow_mismatch=False, source=None):
             "没读到登录态：%s%s（可用扫描功能查看本机已保存的登录态）"
             % (src, "" if source else "，请先打开 WorkBuddy 客户端并登录。")
         )
+    # 过期护栏：来源 token 已过期则明确失败，避免把失效凭证当成功写入。
+    exp = (data.get("auth") or {}).get("expiresAt")
+    if exp and exp / 1000 - time.time() <= 0:
+        return 3, (
+            "该账号登录态已于 %s 过期，续期得到的仍是失效凭证；请先在客户端登录/切换到该账号后重试"
+            % time.strftime("%Y-%m-%d", time.localtime(exp / 1000))
+        )
+    # 服务端吊销护栏：本地有效期没过 ≠ 服务端还认（2026-10-18 事故：d/e/f 有效期剩
+    # 几十天但 token 已全部被吊销）。确定吊销则明确失败，不再报「续期成功」误导。
+    alive, alive_detail = auth_alive(data.get("auth") or {})
+    if alive is False:
+        return 3, (
+            "该账号登录态已被服务端吊销（%s），本地快照全部失效；"
+            "请先在客户端重新登录该账号，再续期抓取新凭证" % alive_detail
+        )
     cur_uid = (data.get("account") or {}).get("uid")
     nickname = (data.get("account") or {}).get("nickname")
     if account.get("uid") and cur_uid != account["uid"] and not allow_mismatch:
@@ -272,36 +385,172 @@ def capture(account, allow_mismatch=False, source=None):
             "当前登录的是「%s」(%s)，与配置里 %s 的 uid %s 不一致。"
             % (nickname, cur_uid, account["key"], account["uid"])
         )
+    # 变化检测：仅用于措辞（是否真的换到了更新的 token），不再把「未变化」判为失败——
+    # 续期 = 复制磁盘登录态，token 与现有凭证一致也应视为成功（有效期依然有效）。
+    cur_cred = C.load_json(os.path.join(C.BASE_DIR, account["cred_file"]))
+    cur_exp = (cur_cred.get("auth") or {}).get("expiresAt") if cur_cred else None
+    changed = not (
+        cur_exp is not None and exp is not None
+        and abs((cur_exp - exp) / 1000.0) < 3600  # 有效期差异 < 1 小时，视为同一份
+    )
     C.save_json(os.path.join(C.BASE_DIR, account["cred_file"]), data)
     # 抓完立刻纠 config 里的账号名（避免 UI 长期显示 uin/uid 这类数字串）
     try:
         sync_display_name(account, data)
     except Exception:
         pass
-    exp = cred_expiry_days(data)
+    exp_days = cred_expiry_days(data)
     shown = cred_display_name(data) or nickname
+    if changed:
+        return 0, (
+            "已续期 %s（%s）：有效期约 %.0f 天"
+            % (account["key"], shown, exp_days or -1)
+        )
     return 0, (
-        "已保存 %s（%s）凭证：%s / %s / 有效期约 %.0f 天"
-        % (account["key"], account.get("label", ""), shown, cur_uid, exp or -1)
+        "已续期 %s（%s）：token 未变化，有效期约 %.0f 天"
+        % (account["key"], shown, exp_days or -1)
     )
 
 
+def _live_uid():
+    """当前客户端在线账号的 uid（只读活文件，不切号）。"""
+    try:
+        return (C.load_json(C.CURRENT_AUTH) or {}).get("account", {}).get("uid")
+    except Exception:
+        return None
+
+
+def _source_for(account, live_uid=None):
+    """为该账号选定续期来源：统一取该 uid 有效期最远（离过期最久）的登录态快照，
+    让续期得到的 token 有效期最长。在线与否走同一逻辑——不再把在线号强行绑到有效期
+    更短的活文件上（那是之前续期被「砍」成 28 天、且报『已是最新/续不上』的根因）。"""
+    uid = account.get("uid")
+    if not uid:
+        return None, "无"
+    src = best_source_for_uid(uid)
+    return src, ("快照" if src else "无")
+
+
+def _best_sources_map():
+    """一次全盘扫描，返回 {uid: [候选登录态路径，按优先级降序]}（有效期最远优先，其次 mtime 最新）。
+
+    批量续期专用（2026-10-17）：原实现每个账号都调用 best_source_for_uid →
+    每次都把全部登录态目录（约 190 个 .info，含解密）扫一遍，20 个账号就是
+    20 × 全量扫描，实测批量续期要 118 秒，Web 端等到超时、看着像「没真正续期」。
+    现改为只扫一次，20 个账号共享结果，耗时可降到秒级。
+
+    2026-10-18 改为返回**完整候选列表**而非单个最优：「有效期最远」可能只是
+    旧会话的有效期长（55 天期老 token vs 新登录的 28 天期 token），老会话可能
+    已被服务端清掉。调用方应按序探活逐个尝试（见 _capture_with_fallback），
+    保证「昨天刚登录的新凭证」优先顶上来，而不是抱着旧长命 token 不放。
+    """
+    now_ms = time.time() * 1000
+    cand = {}
+    for d in C.auth_scan_dirs():
+        for path in glob.glob(os.path.join(d, "*.info")):
+            try:
+                data = read_auth_file(path)
+            except Exception:
+                continue
+            if not data:
+                continue
+            uid = (data.get("account") or {}).get("uid")
+            exp = (data.get("auth") or {}).get("expiresAt")
+            if not uid or not exp or exp / 1000 - time.time() <= 0:
+                continue  # 跳过无 uid / 无有效期 / 已过期的来源
+            try:
+                mtime = os.path.getmtime(path)
+            except OSError:
+                continue
+            cand.setdefault(uid, []).append(((exp - now_ms, mtime), path))
+    return {
+        uid: [p for _, p in sorted(items, key=lambda x: x[0], reverse=True)]
+        for uid, items in cand.items()
+    }
+
+
+def _capture_with_fallback(account, candidates):
+    """按候选顺序逐个尝试抓取；某候选 token 已过期/被服务端吊销（rc=3）就试下一个。
+
+    配合 capture() 的吊销护栏：每个候选写盘前都会先探活，保证落盘的凭证是
+    「当前真能用的」，而不是「理论上有效期最长的」。其他错误（rc=2 无登录态/
+    uid 不符）说明账号本身没登录好，继续试下一个候选没意义，直接停。
+    """
+    if not candidates:
+        return capture(account)
+    rc, msg = 2, "无可用候选"
+    for src in candidates:
+        rc, msg = capture(account, source=src)
+        if rc == 0:
+            return rc, msg
+        if rc != 3:
+            break
+    return rc, msg
+
+
+def capture_best(account):
+    """单账号续期入口：在该 uid 的全部本地快照里按优先级逐个探活抓取，取第一个真能用的。
+
+    取代旧的 best_source_for_uid + capture 组合：旧逻辑只取「有效期最远」的一份，
+    若那份恰好是已被服务端清掉的旧会话（55 天期老 token），续期就把死凭证落盘，
+    而磁盘上昨天刚登录的新凭证反而被跳过（2026-10-18 d/e/f 事故的放大器）。
+    """
+    uid = account.get("uid")
+    if not uid:
+        return capture(account)
+    now_s = time.time()
+    now_ms = now_s * 1000
+    scored = []
+    for p, exp in _all_sources_for_uid(uid):
+        if not exp or exp / 1000 - now_s <= 0:
+            continue
+        try:
+            scored.append(((exp - now_ms, os.path.getmtime(p)), p))
+        except OSError:
+            continue
+    cands = [p for _, p in sorted(scored, key=lambda x: x[0], reverse=True)]
+    return _capture_with_fallback(account, cands)
+
+
 def capture_all_possible(cfg=None):
-    """一键续期：所有已配置账号，本机还有登录态就直接抓。返回 (ok_keys, skipped)。"""
+    """一键续期：所有已配置账号，本机还有登录态就直接抓。返回 (ok_keys, skipped)。
+
+    与单账号「续期」保持一致：统一用 best_source_for_uid 取该 uid 有效期最远的快照，
+    让续期得到的 token 有效期最长（在线号同样走这条逻辑，不再强行绑活文件）。
+    rc=0 计入 ok 侧；rc=2/3（无登录态/已过期）计入 skipped。
+    """
     cfg = cfg or C.load_config()
-    found = {d["uid"]: d for d in discover_accounts()}
+    src_map = _best_sources_map()
     ok, skipped = [], []
     for a in cfg["accounts"]:
-        src = found.get(a.get("uid"))
-        if not src:
-            skipped.append("%s（本机无登录态，需扫码登录）" % a["key"])
-            continue
-        rc, msg = capture(a, source=src["path"])
+        rc, msg = _capture_with_fallback(a, src_map.get(a.get("uid")))
         if rc == 0:
             ok.append(a["key"])
         else:
-            skipped.append("%s（%s）" % (a["key"], msg[:40]))
+            skipped.append("%s（%s）" % (a["key"], msg[:60]))
     return ok, skipped
+
+
+def renew_all_with_status(cfg=None):
+    """逐账号续期明细，供 Web 展示（区分「已续期 / 失败 / 已过期」）。
+
+    2026-10-17：改用 _best_sources_map 一次扫描共享结果（原逐账号全目录扫描，
+    20 账号实测 118 秒，Web 请求超时、用户以为没续上）。"""
+    cfg = cfg or C.load_config()
+    src_map = _best_sources_map()
+    rows = []
+    for a in cfg["accounts"]:
+        cands = src_map.get(a.get("uid"))
+        kind = "快照" if cands else "无"
+        rc, msg = _capture_with_fallback(a, cands)
+        rows.append({
+            "key": a["key"],
+            "rc": rc,
+            "message": msg,
+            "source": kind,
+            "status": {0: "已续期", 2: "失败", 3: "已过期"}.get(rc, "失败"),
+        })
+    return rows
 
 
 def next_key(cfg):

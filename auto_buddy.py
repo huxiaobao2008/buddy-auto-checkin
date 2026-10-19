@@ -396,6 +396,17 @@ def cmd_run(cfg, args):
             "然后执行 python auto_buddy.py --capture <key>"
         )
 
+    # 签到后自动刷新积分台账（可用积分 + 过期倒计时）。
+    # 旁路逻辑：只调官方接口、不切号不碰客户端；失败仅打印，不改变本次退出码。
+    try:
+        from core import credits as CRE
+
+        print("\n===== 积分台账刷新（签到后自动执行） =====")
+        CRE.snapshot([a for a, _ in due], log=lambda m: print(m, flush=True))
+        print("报告：logs/credits_report.html")
+    except Exception as e:
+        print("[积分台账] 刷新失败（不影响签到）：%s: %s" % (type(e).__name__, e))
+
     return 2 if has_auth_fail else (1 if has_fail else 0)
 
 

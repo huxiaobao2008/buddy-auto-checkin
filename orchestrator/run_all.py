@@ -96,6 +96,28 @@ def _get_account_tasks_done(key):
     return tasks_done.get(key, [])
 
 
+def _add_credit_today(key, n):
+    """累加「今日已累计领取积分」（跨多次执行持久化在 progress.json）。
+
+    2026-10-17 新增：汇总报告里的「本次实得」只算本轮执行；一天跑多轮时，
+    后面的轮次全部 +0，用户会误以为「领了积分日志却报 0」。
+    这里把每轮实得累计起来，报告同时展示「本次 / 今日累计」两个口径。"""
+    if not n:
+        return
+    data = _read_progress()
+    ct = data.setdefault("credit_today", {})
+    ct[key] = int(ct.get(key) or 0) + int(n)
+    _write_progress(data)
+
+
+def _credit_today(key):
+    """读「今日累计领取积分」。"""
+    try:
+        return int((_read_progress().get("credit_today") or {}).get(key) or 0)
+    except Exception:
+        return 0
+
+
 PY = (
     CFG.load_config().get("python_path")
     or os.environ.get("PYTHON", "")
@@ -313,7 +335,13 @@ def run_all(progress=None):
             )
             accounts = [a for a in accounts if a["key"] not in done_set]
             if not accounts:
-                p("start", "今天所有账号都已完成，直接结束")
+                _ct = prog.get("credit_today") or {}
+                _ct_total = sum(int(v or 0) for v in _ct.values())
+                p(
+                    "start",
+                    "今天所有账号都已完成，直接结束（今日已累计领取 %d 积分）"
+                    % _ct_total,
+                )
                 prog["finished_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 _write_progress(prog)
                 return summary
@@ -381,12 +409,19 @@ def run_all(progress=None):
                         _tag,
                     )
                 cm = _cm(a["key"])
-                cm["api"] = int(gt.get("credit_got") or 0)
+                # 修复（2026-10-17）：每日签到的实得积分（+100/号）此前从不计入
+                # 「本次实得」——签到是最主要的积分来源，导致用户看到
+                # 「明明签了到/领了积分，汇总报告却全是 0」。现计入 API 侧台账。
+                ck = (r.get("tasks") or {}).get("checkin") or {}
+                ck_gain = int(((ck.get("data") or {}).get("gained")) or 0)
+                cm["api"] = int(gt.get("credit_got") or 0) + ck_gain
                 cm["api_tasks"] = [
                     s.get("title")
                     for s in (gt.get("steps") or [])
                     if s.get("step") == "claim" and "领取成功" in str(s.get("reason"))
                 ]
+                if ck_gain:
+                    cm["api_tasks"].append("每日签到 +%d" % ck_gain)
                 summary["accounts"].append(
                     {"key": a["key"], "api": st, "reason": r.get("reason")}
                 )
@@ -581,10 +616,18 @@ def run_all(progress=None):
             except Exception as e:
                 remaining = ["（状态读取失败：%s）" % str(e)[:50]]
             got_tasks = cm["api_tasks"] + cm["ui_tasks"] + cm["claim_tasks"]
+            # 累计「今日已领」后再报告：一天跑多轮时，后几轮「本次实得 +0」是
+            # 正常的（前面轮次已领），必须把今日累计一起报出来，否则用户看到
+            # 全 0 会误以为「领了积分日志却报 0」（2026-10-17 用户反馈）。
+            _add_credit_today(key, total_got)
+            today_got = _credit_today(key)
+            today_txt = (
+                "；今日累计 +%d" % today_got if today_got != total_got else ""
+            )
             p(
                 "report:%s" % key,
-                "%s：本次实得 +%d 积分（API %d / UI %d / 收尾 %d）"
-                % (label, total_got, cm["api"], cm["ui"], cm["claim"]),
+                "%s：本次实得 +%d 积分（API %d / UI %d / 收尾 %d）%s"
+                % (label, total_got, cm["api"], cm["ui"], cm["claim"], today_txt),
             )
             if got_tasks:
                 p(
@@ -641,16 +684,36 @@ def run_all(progress=None):
         summary["claim_total"] = ui_claim_total + claim_all_total
         summary["ui_claim_total"] = ui_claim_total
         summary["claim_all_total"] = claim_all_total
+        _today_all = sum(
+            int(v or 0)
+            for v in ((_read_progress().get("credit_today") or {}).values())
+        )
         p(
             "done",
-            "全部完成。阶段二领取 %d 积分，阶段三领取 %d 积分，本次共领取 %d 积分。日志：%s"
-            % (ui_claim_total, claim_all_total, summary["claim_total"], logpath),
+            "全部完成。阶段二领取 %d 积分，阶段三领取 %d 积分，本次共领取 %d 积分（今日累计 %d）。日志：%s"
+            % (ui_claim_total, claim_all_total, summary["claim_total"], _today_all, logpath),
         )
         # 2026-09-25: 写 finished_at，表示今天全部跑完了
         prog = _read_progress()
         prog["finished_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         _write_progress(prog)
         p("done", "已写进度：今天全部完成，下次再跑会直接跳过")
+
+        # 5.5) 积分台账：签到后自动刷新「可用积分 + 过期倒计时」。
+        # 纯旁路——用各账号凭证快照直接调官方 billing 接口，不需要切号、不碰客户端；
+        # 任何失败只记一行日志，绝不影响本次签到的结果与退出码。
+        try:
+            from core import credits as CRE
+
+            def _clog(msg):
+                p("report", msg)
+
+            CRE.snapshot(accounts, log=_clog)
+        except Exception as e:
+            p(
+                "report",
+                "积分台账刷新失败（不影响本次签到）：%s: %s" % (type(e).__name__, e),
+            )
         return summary
     finally:
         try:
