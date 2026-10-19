@@ -1,48 +1,81 @@
 {
-  "_readme": "配置模板：复制为 config.json 后按实际填写。切勿把 config.json 与 accounts/ 提交到仓库。",
-  "python_path": "REPLACE_ME",
-  "auto_add_new_accounts": false,
+  "_readme": [
+    "配置模板：复制为 config.json 后即可使用（cp config.example.json config.json）。",
+    "本文件已包含可直接运行的默认值，正常情况下无需修改任何字段。",
+    "",
+    "字段说明：",
+    "  python_path            留空即可，程序会自动使用当前 Python 解释器；想固定版本再填绝对路径",
+    "  auto_add_new_accounts   true = 扫到新的本机登录态时自动入库",
+    "  allow_write_client_auth false = 绝不回写客户端登录态文件（保持默认，安全）",
+    "  retry                  网络异常 / 5xx 的重试次数与退避秒数",
+    "  schedule.trigger_mode   daily=每天按时间点触发；interval=按固定间隔循环",
+    "  schedule.every_minutes  trigger_mode=interval 时的间隔分钟数（最小 30）",
+    "  schedule.window_minutes 时间点前后多少分钟算「到点」（防止计划任务延迟漏跑）",
+    "  schedule.task_prefix    Windows 计划任务名前缀",
+    "  alert.desktop_notify    异常时是否弹 Windows 系统气泡提醒",
+    "  alert.notify_on_success 成功时也弹提醒（默认 false，避免打扰）",
+    "  alert.webhook_url       可选：异常时 POST 到该地址（企业微信 / 钉钉机器人等）",
+    "  accounts[]              账号列表，用 --discover / --sync / --add 自动填入，无需手写",
+    "  skip_tasks              明确不执行的任务（不接取、不领取）",
+    "  paid_tasks              付费 / 捐款类任务，一票否决，只记录不执行",
+    "",
+    "⚠ 切勿把 config.json 与 accounts/ 提交到仓库（已被 .gitignore 忽略）。"
+  ],
+  "python_path": "",
+  "auto_add_new_accounts": true,
   "allow_write_client_auth": false,
   "retry": {
-    "attempts": 0,
-    "backoff_seconds": 0
+    "attempts": 2,
+    "backoff_seconds": 2
   },
   "schedule": {
-    "trigger_mode": "REPLACE_ME",
-    "every_minutes": 0,
-    "window_minutes": 0,
-    "task_prefix": "REPLACE_ME"
+    "trigger_mode": "daily",
+    "every_minutes": 60,
+    "window_minutes": 60,
+    "task_prefix": "WorkBuddyAuto"
   },
   "alert": {
-    "desktop_notify": false,
+    "desktop_notify": true,
     "notify_on_success": false,
-    "webhook_url": "REPLACE_ME",
-    "alert_log": "REPLACE_ME"
+    "webhook_url": "",
+    "alert_log": "logs/alerts.log"
   },
   "skip_tasks": {
-    "_note": "REPLACE_ME",
+    "_note": "明确要求不执行的任务：不接取、不领取、不推动进度。删除对应 code 即可恢复。",
     "codes": [
-      "REPLACE_ME",
-      "REPLACE_ME"
+      "black_cat",
+      "wb_wechat_oa_subscribe_task",
+      "Expert_Philanthropy"
     ],
     "keywords": []
   },
   "accounts": [],
   "paid_tasks": {
     "codes": [
-      "REPLACE_ME"
+      "Expert_Philanthropy"
     ],
     "keywords": [
-      "REPLACE_ME",
-      "REPLACE_ME"
+      "捐款",
+      "捐赠",
+      "捐助",
+      "献爱心",
+      "公益",
+      "付费",
+      "充值",
+      "支付",
+      "购买",
+      "消费",
+      "下单",
+      "开通会员",
+      "¥"
     ]
   },
-  "auto_mode": false,
-  "free_quota": false,
-  "_free_quota_note": "REPLACE_ME",
+  "auto_mode": true,
+  "free_quota": true,
+  "_free_quota_note": "模型走的是「限时免费额度」，会正常耗尽。额度耗尽属客观状态，只记日志、不重试、不判 bug；设为 false = 额度类失败按环境问题豁免，不刷告警。",
   "dev": {},
   "cheap_models": [
-    "REPLACE_ME",
-    "REPLACE_ME"
+    "Hy3",
+    "Hy4 preview"
   ]
 }
